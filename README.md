@@ -143,17 +143,17 @@ dotnet ef database update
  <tbody>
   <tr>
    <td><strong>CriptoAdapter</strong></td>
-   <td>CoinGecko / Binance API</td>
+   <td>Binance API / CoinGecko</td>
    <td>Cotizaciones en USD.</td>
   </tr>
   <tr>
    <td><strong>AccionesAdapter</strong></td>
-   <td>BYMA / Rava / MAV</td>
+   <td>Yahoo Finance / BYMA / Rava / MAV</td>
    <td>Cotizaciones en ARS.</td>
   </tr>
   <tr>
    <td><strong>ExchangeRateAdapter</strong></td>
-   <td>DólarHoy / Ámbito / BCRA</td>
+   <td>DolarAPI / DólarHoy / Ámbito / BCRA</td>
    <td>Tipos de cambio (MEP, CCL, Blue).</td>
   </tr>
  </tbody>
