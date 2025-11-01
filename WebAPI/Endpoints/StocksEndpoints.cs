@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Mvc;
 using Services;
 
 namespace WebAPI.Endpoints
@@ -9,9 +10,13 @@ namespace WebAPI.Endpoints
         {
             var group = app.MapGroup("/api/stocks");
 
-            group.MapPost("/duals", async (List<(string localBA, string usa)> pairs, string? dolar = "CCL", StocksService svc) =>
+            group.MapPost("/duals", async (
+                [FromBody] List<(string localBA, string usa)> pairs,
+                StocksService svc,
+                [FromQuery] string dolar = "CCL"
+            ) =>
             {
-                var data = await svc.GetDualsAsync(pairs.ToArray(), dolar ?? "CCL");
+                var data = await svc.GetDualsAsync(pairs.ToArray(), dolar);
                 return Results.Ok(data);
             });
         }
