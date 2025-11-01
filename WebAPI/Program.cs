@@ -8,11 +8,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddMemoryCache();
+
 // HTTP y dependencias
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<DolarApiClient>();
 builder.Services.AddScoped<DolarService>();
 builder.Services.AddScoped<BinanceClient>();
+builder.Services.AddScoped<CoinGeckoClient>();
 builder.Services.AddScoped<YahooFinanceClient>();
 builder.Services.AddScoped<CryptoService>();
 builder.Services.AddScoped<StocksService>();
