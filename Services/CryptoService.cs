@@ -67,23 +67,25 @@ namespace Services
 
             bool IsDerivative(CryptoTopDTO c)
             {
-                var sym = c.Symbol.Trim().ToUpperInvariant();
-                var name = c.Name.Trim().ToUpperInvariant();
+                var sym = (c.Symbol ?? "").Trim().ToUpperInvariant();
+                var name = (c.Name ?? "").Trim().ToUpperInvariant();
 
-                if (derivativeSyms.Contains(sym)) return true;
+                if (sym is "ETH" or "BTC") return false;
 
-                if (name.Contains("STAKED") || name.Contains("RESTAKED") || name.Contains("LIQUID STAKED"))
-                    return true;
-                if (name.StartsWith("WRAPPED ") || name.Contains(" WRAPPED "))
+                if (sym is "STETH" or "WETH" or "WBTC" or "CBETH" or "RETH" or "WBETH" or "FRXETH" or "RSETH" or "OSETH" or "ANKRETH")
                     return true;
 
-                if (name.Contains("LIDO STAKED ETHER")) return true; 
-                if (name.Contains("WRAPPED BITCOIN")) return true;  
-                if (name.Contains("WRAPPED ETHER")) return true;     
-                if (name.Contains("COINBASE WRAPPED STAKED ETH") || name.Contains("COINBASE STAKED ETH")) return true; 
+                if (name.Contains("STETH") ||
+                    name.Contains("LIDO") ||
+                    name.Contains("STAKED") ||
+                    name.Contains("WRAPPED") ||
+                    name.Contains("RESTAKED") ||
+                    name.Contains("LIQUID STAKED"))
+                    return true;
 
                 return false;
             }
+
 
             var filtered = raw
                 .Where(c => !IsStable(c) && !IsDerivative(c))
