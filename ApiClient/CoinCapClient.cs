@@ -8,7 +8,7 @@ namespace ApiClient
         private readonly HttpClient _http;
         public CoinCapClient(HttpClient http) => _http = http;
 
-        public async Task<List<CryptoTopDTO>> GetTopAsync(int limit = 6, CancellationToken ct = default)
+        public async Task<List<CryptoTopDTO>> GetTopAsync(int limit = 10, CancellationToken ct = default)
         {
             var url = $"https://api.coincap.io/v2/assets?limit={Math.Clamp(limit, 1, 50)}";
             using var resp = await _http.GetAsync(url, ct);

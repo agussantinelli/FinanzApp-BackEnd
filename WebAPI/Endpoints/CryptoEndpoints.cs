@@ -20,7 +20,7 @@ namespace WebAPI.Endpoints
             // Top N por MarketCap (CoinGecko)
             group.MapGet("/top", async (int? limit, CryptoService svc) =>
             {
-                var data = await svc.GetTopAsync(limit ?? 6);
+                var data = await svc.GetTopAsync(limit ?? 10);
                 return Results.Ok(data);
             });
         }

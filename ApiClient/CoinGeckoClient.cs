@@ -8,7 +8,7 @@ namespace ApiClient
         private readonly HttpClient _http;
         public CoinGeckoClient(HttpClient http) => _http = http;
 
-        public async Task<List<CryptoTopDTO>> GetTopAsync(int limit = 6, CancellationToken ct = default)
+        public async Task<List<CryptoTopDTO>> GetTopAsync(int limit = 10, CancellationToken ct = default)
         {
             limit = Math.Clamp(limit, 1, 50);
             var url = $"https://api.coingecko.com/api/v3/coins/markets" +

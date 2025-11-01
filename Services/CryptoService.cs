@@ -19,9 +19,9 @@ namespace Services
         public Task<List<QuoteDTO>> GetQuotesAsync(IEnumerable<string> symbols, CancellationToken ct = default)
             => _binance.GetSpotPricesAsync(symbols, ct);
 
-        public async Task<List<CryptoTopDTO>> GetTopAsync(int limit = 8, CancellationToken ct = default)
+        public async Task<List<CryptoTopDTO>> GetTopAsync(int limit = 10, CancellationToken ct = default)
         {
-            var fetch = Math.Clamp(limit * 4, 20, 80);
+            var fetch = Math.Clamp(limit * 4, 28, 100);
 
             var cacheKey = $"crypto_top_nostable_noderiv_{fetch}";
             if (_cache.TryGetValue(cacheKey, out List<CryptoTopDTO>? cached) && cached is not null)
