@@ -1,36 +1,58 @@
-﻿using DTOs;
+﻿// ApiClient/YahooFinanceClient.cs
+using DTOs;
 using System.Text.Json;
 using System.Net;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ApiClient
 {
     public class YahooFinanceClient
     {
         private readonly HttpClient _http;
-        public YahooFinanceClient(HttpClient http) => _http = http;
+        private readonly IMemoryCache _cache;
+        private static readonly SemaphoreSlim _lock = new(1, 1);
+
+        public YahooFinanceClient(HttpClient http, IMemoryCache cache)
+        {
+            _http = http; _cache = cache;
+        }
 
         public async Task<List<QuoteDTO>> GetQuotesAsync(IEnumerable<string> symbols, CancellationToken ct = default)
         {
-            // limpiar símbolos vacíos y duplicados
             var symList = symbols?
                 .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Select(s => s.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(s => s.Trim().ToUpperInvariant())
+                .Distinct()
                 .ToList() ?? new();
 
-            if (symList.Count == 0) return new List<QuoteDTO>();
+            if (symList.Count == 0) return new();
 
-            // Yahoo tolera muchos símbolos, pero loteamos por prolijidad
-            const int BATCH = 10;
+            var toFetch = new List<string>();
             var result = new List<QuoteDTO>();
 
-            for (int i = 0; i < symList.Count; i += BATCH)
+            foreach (var s in symList)
             {
-                var chunk = symList.Skip(i).Take(BATCH).ToList();
-                var joined = string.Join(",", chunk);
+                if (_cache.TryGetValue($"y_{s}", out QuoteDTO? q) && q is not null)
+                    result.Add(q);
+                else
+                    toFetch.Add(s);
+            }
+
+            if (toFetch.Count == 0) return result;
+
+            await _lock.WaitAsync(ct);
+            try
+            {
+                var remaining = new List<string>();
+                foreach (var s in toFetch)
+                {
+                    if (!_cache.TryGetValue($"y_{s}", out QuoteDTO? _)) remaining.Add(s);
+                }
+                if (remaining.Count == 0) return result;
+
+                var joined = string.Join(",", remaining);
                 var url = $"https://query1.finance.yahoo.com/v7/finance/quote?symbols={joined}";
 
-                // reintentos básicos para 429/5xx
                 var attempts = 0;
                 while (true)
                 {
@@ -39,44 +61,47 @@ namespace ApiClient
 
                     if (resp.StatusCode == HttpStatusCode.TooManyRequests || (int)resp.StatusCode >= 500)
                     {
-                        if (attempts >= 3) break; // dar por perdido este batch
-                        // respetar Retry-After si vino
-                        var delayMs = 700 * attempts;
-                        if (resp.Headers.RetryAfter?.Delta is { } delta) delayMs = (int)delta.TotalMilliseconds;
-                        await Task.Delay(Math.Max(400, delayMs), ct);
+                        if (attempts >= 3) break;
+                        var baseMs = 400 + Random.Shared.Next(0, 250); // jitter
+                        var delay = baseMs * attempts * attempts;
+                        if (resp.Headers.RetryAfter?.Delta is { } delta)
+                            delay = Math.Max(delay, (int)delta.TotalMilliseconds);
+                        await Task.Delay(delay, ct);
                         continue;
                     }
 
-                    if (!resp.IsSuccessStatusCode) break; // pasar al siguiente batch sin explotar
+                    if (!resp.IsSuccessStatusCode) break;
 
                     var json = await resp.Content.ReadAsStringAsync(ct);
                     using var doc = JsonDocument.Parse(json);
-                    var results = doc.RootElement
-                        .GetProperty("quoteResponse")
-                        .GetProperty("result");
+                    var results = doc.RootElement.GetProperty("quoteResponse").GetProperty("result");
 
+                    var fetched = new List<QuoteDTO>();
                     foreach (var el in results.EnumerateArray())
                     {
                         var sym = el.GetProperty("symbol").GetString() ?? "";
-                        var pxOk = el.TryGetProperty("regularMarketPrice", out var p);
-                        var curOk = el.TryGetProperty("currency", out var c);
+                        if (!el.TryGetProperty("regularMarketPrice", out var p)) continue;
 
-                        if (!pxOk) continue;
                         var px = p.GetDecimal();
-                        var cur = curOk ? (c.GetString() ?? "USD") : "USD";
+                        var cur = el.TryGetProperty("currency", out var c) ? (c.GetString() ?? "USD") : "USD";
 
-                        result.Add(new QuoteDTO
+                        var q = new QuoteDTO
                         {
                             Symbol = sym,
                             Price = Math.Round(px, 2),
                             Currency = cur,
                             Source = "YahooFinance",
                             TimestampUtc = DateTime.UtcNow
-                        });
+                        };
+                        fetched.Add(q);
+                        _cache.Set($"y_{sym}", q, TimeSpan.FromSeconds(60));
                     }
+
+                    result.AddRange(fetched);
                     break;
                 }
             }
+            finally { _lock.Release(); }
 
             return result;
         }

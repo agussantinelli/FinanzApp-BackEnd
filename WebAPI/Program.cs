@@ -8,18 +8,40 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Cache
 builder.Services.AddMemoryCache();
 
-// HTTP y dependencias
-builder.Services.AddHttpClient();
-builder.Services.AddScoped<DolarApiClient>();
+builder.Services.AddHttpClient<DolarApiClient>(); 
+
+builder.Services.AddHttpClient<CoinGeckoClient>(c =>
+{
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("FinanzApp/1.0 (+https://localhost)");
+    c.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+});
+
+builder.Services.AddHttpClient<CoinCapClient>(c =>
+{
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("FinanzApp/1.0 (+https://localhost)");
+    c.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+});
+
+builder.Services.AddHttpClient<BinanceClient>(c =>
+{
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("FinanzApp/1.0 (+https://localhost)");
+    c.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+});
+
+builder.Services.AddHttpClient<YahooFinanceClient>(c =>
+{
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("FinanzApp/1.0 (+https://localhost)");
+    c.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+});
+
+// --- SERVICES ---
 builder.Services.AddScoped<DolarService>();
-builder.Services.AddScoped<BinanceClient>();
-builder.Services.AddScoped<CoinGeckoClient>();
-builder.Services.AddScoped<YahooFinanceClient>();
-builder.Services.AddScoped<CryptoService>();
-builder.Services.AddScoped<StocksService>();
-builder.Services.AddScoped<CedearsService>();
+builder.Services.AddScoped<CryptoService>();   
+builder.Services.AddScoped<StocksService>();   
+builder.Services.AddScoped<CedearsService>();  
 
 // CORS
 var corsPolicy = "_finanzappCors";

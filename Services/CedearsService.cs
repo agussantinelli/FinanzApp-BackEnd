@@ -1,4 +1,9 @@
-﻿using ApiClient;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using ApiClient;
 using DTOs;
 
 namespace Services
@@ -8,7 +13,8 @@ namespace Services
         private readonly YahooFinanceClient _yahoo;
         private readonly DolarService _dolar;
 
-        // Mapa rápido de ratios (completar/ajustar con tabla oficial)
+        // Ratios de referencia (completá/ajustá según lista vigente).
+        // Significa: <Ratio> CEDEARs = 1 acción USA.
         private static readonly List<CedearRatioDTO> Ratios = new()
         {
             new() { CedearSymbol = "AAPL.BA", UsSymbol = "AAPL", Ratio = 10m },
@@ -18,39 +24,60 @@ namespace Services
 
         public CedearsService(YahooFinanceClient yahoo, DolarService dolar)
         {
-            _yahoo = yahoo; _dolar = dolar;
+            _yahoo = yahoo;
+            _dolar = dolar;
         }
 
-        public async Task<List<DualQuoteDTO>> GetCedearDualsAsync(string dolarPreferido = "CCL")
+        public async Task<List<DualQuoteDTO>> GetCedearDualsAsync(
+            string dolarPreferido = "CCL",
+            CancellationToken ct = default)
         {
-            var dolar = (await _dolar.GetCotizacionesAsync())
-                        .FirstOrDefault(d => d.Nombre.Equals(dolarPreferido, StringComparison.OrdinalIgnoreCase));
+            if (Ratios.Count == 0) return new();
+
+            var dolar = (await _dolar.GetCotizacionesAsync()).FirstOrDefault(d =>
+                d.Nombre.Equals(dolarPreferido, StringComparison.OrdinalIgnoreCase));
             var tc = (decimal?)dolar?.Venta ?? 0m;
+            if (tc <= 0m) return new();
 
-            var cedearSyms = Ratios.Select(r => r.CedearSymbol);
-            var usSyms = Ratios.Select(r => r.UsSymbol);
+            // 1Armar una sola lista de símbolos (cedear + usa) y pedirlos juntos
+            var cedearSyms = Ratios.Select(r => (r.CedearSymbol ?? "").Trim().ToUpperInvariant())
+                                   .Where(s => !string.IsNullOrWhiteSpace(s));
+            var usSyms = Ratios.Select(r => (r.UsSymbol ?? "").Trim().ToUpperInvariant())
+                                   .Where(s => !string.IsNullOrWhiteSpace(s));
 
-            var cedearQuotes = await _yahoo.GetQuotesAsync(cedearSyms);
-            var usQuotes = await _yahoo.GetQuotesAsync(usSyms);
+            var all = cedearSyms.Concat(usSyms)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .ToList();
 
-            var list = new List<DualQuoteDTO>();
+            if (all.Count == 0) return new();
+
+            var quotes = await _yahoo.GetQuotesAsync(all, ct);
+            if (quotes.Count == 0) return new();
+
+            var bySymbol = quotes.ToDictionary(q => q.Symbol, StringComparer.OrdinalIgnoreCase);
+
+            // Armar respuesta
+            var list = new List<DualQuoteDTO>(Ratios.Count);
             foreach (var r in Ratios)
             {
-                var cq = cedearQuotes.FirstOrDefault(q => q.Symbol == r.CedearSymbol);
-                var uq = usQuotes.FirstOrDefault(q => q.Symbol == r.UsSymbol);
-                if (cq is null || uq is null || tc == 0) continue;
+                if (!bySymbol.TryGetValue(r.CedearSymbol, out var cq)) continue; // CEDEAR (ARS)
+                if (!bySymbol.TryGetValue(r.UsSymbol, out var uq)) continue;     // USA (USD)
+                if (r.Ratio <= 0m) continue;
 
-                list.Add(new DualQuoteDTO
+                var dto = new DualQuoteDTO
                 {
                     LocalSymbol = cq.Symbol,
-                    LocalPriceARS = cq.Price,   // CEDEAR cotiza en ARS
+                    LocalPriceARS = cq.Price, // CEDEAR en ARS
                     UsSymbol = uq.Symbol,
-                    UsPriceUSD = uq.Price,
+                    UsPriceUSD = uq.Price, // Acción USA en USD
                     UsedDollarRate = tc,
                     DollarRateName = dolarPreferido,
                     CedearRatio = r.Ratio
-                });
+                };
+
+                list.Add(dto);
             }
+
             return list;
         }
     }

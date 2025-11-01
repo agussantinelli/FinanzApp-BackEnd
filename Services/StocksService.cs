@@ -1,4 +1,9 @@
-﻿using ApiClient;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using ApiClient;
 using DTOs;
 
 namespace Services
@@ -10,30 +15,48 @@ namespace Services
 
         public StocksService(YahooFinanceClient yahoo, DolarService dolar)
         {
-            _yahoo = yahoo; _dolar = dolar;
+            _yahoo = yahoo;
+            _dolar = dolar;
         }
 
-        // Devuelve dualidad para pares: (local .BA, usa)
-        public async Task<List<DualQuoteDTO>> GetDualsAsync((string localBA, string usa)[] pairs, string dolarPreferido = "CCL")
+        public async Task<List<DualQuoteDTO>> GetDualsAsync(
+            (string localBA, string usa)[] pairs,
+            string dolarPreferido = "CCL",
+            CancellationToken ct = default)
         {
-            var localSymbols = pairs.Select(p => p.localBA);
-            var usSymbols = pairs.Select(p => p.usa);
+            // Normalizar y filtrar
+            var cleanPairs = (pairs ?? Array.Empty<(string, string)>())
+                .Select(p => (localBA: (p.localBA ?? "").Trim().ToUpperInvariant(),
+                              usa: (p.usa ?? "").Trim().ToUpperInvariant()))
+                .Where(p => !string.IsNullOrWhiteSpace(p.localBA) && !string.IsNullOrWhiteSpace(p.usa))
+                .Distinct()
+                .ToArray();
 
-            var dolar = (await _dolar.GetCotizacionesAsync())
-                        .FirstOrDefault(d => d.Nombre.Equals(dolarPreferido, StringComparison.OrdinalIgnoreCase));
+            if (cleanPairs.Length == 0) return new();
+
+            var dolar = (await _dolar.GetCotizacionesAsync()).FirstOrDefault(d =>
+                d.Nombre.Equals(dolarPreferido, StringComparison.OrdinalIgnoreCase));
             var tc = (decimal?)dolar?.Venta ?? 0m;
+            if (tc <= 0m) return new();
 
-            var localQuotes = await _yahoo.GetQuotesAsync(localSymbols);
-            var usQuotes = await _yahoo.GetQuotesAsync(usSymbols);
+            // Una sola llamada a Yahoo con todos los símbolos (locales + USA)
+            var allSymbols = cleanPairs.Select(p => p.localBA)
+                                       .Concat(cleanPairs.Select(p => p.usa))
+                                       .Distinct(StringComparer.OrdinalIgnoreCase)
+                                       .ToList();
 
-            var result = new List<DualQuoteDTO>();
-            foreach (var (localBA, usa) in pairs)
+            var quotes = await _yahoo.GetQuotesAsync(allSymbols, ct);
+            if (quotes.Count == 0) return new();
+
+            var bySymbol = quotes.ToDictionary(q => q.Symbol, StringComparer.OrdinalIgnoreCase);
+
+            var result = new List<DualQuoteDTO>(cleanPairs.Length);
+            foreach (var (localBA, usa) in cleanPairs)
             {
-                var lq = localQuotes.FirstOrDefault(q => q.Symbol.Equals(localBA, StringComparison.OrdinalIgnoreCase));
-                var uq = usQuotes.FirstOrDefault(q => q.Symbol.Equals(usa, StringComparison.OrdinalIgnoreCase));
-                if (lq is null || uq is null || tc == 0) continue;
+                if (!bySymbol.TryGetValue(localBA, out var lq)) continue;
+                if (!bySymbol.TryGetValue(usa, out var uq)) continue;
 
-                result.Add(new DualQuoteDTO
+                var dto = new DualQuoteDTO
                 {
                     LocalSymbol = lq.Symbol,
                     LocalPriceARS = lq.Price,
@@ -41,8 +64,11 @@ namespace Services
                     UsPriceUSD = uq.Price,
                     UsedDollarRate = tc,
                     DollarRateName = dolarPreferido
-                });
+                };
+
+                result.Add(dto);
             }
+
             return result;
         }
     }

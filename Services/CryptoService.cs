@@ -9,6 +9,7 @@ namespace Services
         private readonly BinanceClient _binance;
         private readonly CoinGeckoClient _gecko;
         private readonly IMemoryCache _cache;
+        private readonly CoinCapClient _coincap;
 
         public CryptoService(BinanceClient binance, CoinGeckoClient gecko, IMemoryCache cache)
         {
@@ -24,9 +25,20 @@ namespace Services
             if (_cache.TryGetValue(key, out List<CryptoTopDTO>? cached) && cached is not null)
                 return cached;
 
-            var data = await _gecko.GetTopAsync(limit, ct);
-            _cache.Set(key, data, TimeSpan.FromMinutes(2)); // cache 2'
+            List<CryptoTopDTO> data;
+            try
+            {
+                data = await _gecko.GetTopAsync(limit, ct);
+                if (data.Count == 0) throw new Exception("Gecko vacío");
+            }
+            catch
+            {
+                data = await _coincap.GetTopAsync(limit, ct); 
+            }
+
+            _cache.Set(key, data, TimeSpan.FromMinutes(2));
             return data;
         }
+
     }
 }
