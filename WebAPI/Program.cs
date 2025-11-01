@@ -10,26 +10,22 @@ builder.Services.AddSwaggerGen();
 
 // HTTP y dependencias
 builder.Services.AddHttpClient();
-builder.Services.AddScoped<ApiClient.BinanceClient>();
-builder.Services.AddScoped<ApiClient.YahooFinanceClient>();
-builder.Services.AddScoped<Services.CryptoService>();
-builder.Services.AddScoped<Services.StocksService>();
-builder.Services.AddScoped<Services.CedearsService>();
+builder.Services.AddScoped<DolarApiClient>();
+builder.Services.AddScoped<DolarService>();
+builder.Services.AddScoped<BinanceClient>();
+builder.Services.AddScoped<YahooFinanceClient>();
+builder.Services.AddScoped<CryptoService>();
+builder.Services.AddScoped<StocksService>();
+builder.Services.AddScoped<CedearsService>();
 
-// CORS - Permitir acceso desde tu frontend
+// CORS
 var corsPolicy = "_finanzappCors";
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(name: corsPolicy, policy =>
-    {
-        policy
-            .WithOrigins(
-                "http://localhost:3000",   
-                "https://localhost:3000"  
-            )
-            .AllowAnyHeader()
-            .AllowAnyMethod();
-    });
+    options.AddPolicy(corsPolicy, policy =>
+        policy.WithOrigins("http://localhost:3000", "https://localhost:3000")
+              .AllowAnyHeader()
+              .AllowAnyMethod());
 });
 
 var app = builder.Build();
@@ -39,22 +35,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-else
-{
-    app.UseExceptionHandler("/Error");
-    app.UseHsts();
-}
 
 app.UseHttpsRedirection();
-
 app.UseCors(corsPolicy);
 
-#region Endpoints
+// Endpoints
 app.MapDolarEndpoints();
 app.MapCedearsEndpoints();
 app.MapCryptoEndpoints();
 app.MapStocksEndpoints();
-
-#endregion
 
 app.Run();
