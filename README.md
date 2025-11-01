@@ -143,7 +143,7 @@ dotnet ef database update
  <tbody>
   <tr>
    <td><strong>CriptoAdapter</strong></td>
-   <td>Binance API</td>
+   <td>Binance API / CoinGecko</td>
    <td>Cotizaciones en USD.</td>
   </tr>
   <tr>
