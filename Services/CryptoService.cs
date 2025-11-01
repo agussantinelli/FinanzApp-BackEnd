@@ -19,14 +19,15 @@ namespace Services
         public Task<List<QuoteDTO>> GetQuotesAsync(IEnumerable<string> symbols, CancellationToken ct = default)
             => _binance.GetSpotPricesAsync(symbols, ct);
 
-        public async Task<List<CryptoTopDTO>> GetTopAsync(int limit = 6, CancellationToken ct = default)
+        public async Task<List<CryptoTopDTO>> GetTopAsync(int limit = 8, CancellationToken ct = default)
         {
-            var fetch = Math.Clamp(limit * 3, 10, 60);
+            var fetch = Math.Clamp(limit * 4, 20, 80);
 
-            var key = $"crypto_top_nostable_{fetch}";
-            if (_cache.TryGetValue(key, out List<CryptoTopDTO>? cached) && cached is not null)
+            var cacheKey = $"crypto_top_nostable_noderiv_{fetch}";
+            if (_cache.TryGetValue(cacheKey, out List<CryptoTopDTO>? cached) && cached is not null)
                 return cached.Take(limit).ToList();
 
+            //  CoinGecko → fallback CoinCap
             List<CryptoTopDTO> raw;
             try
             {
@@ -38,36 +39,64 @@ namespace Services
                 raw = await _coincap.GetTopAsync(fetch, ct);
             }
 
+            // StablesCoin más comunes
             var stableSyms = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "USDT","USDC","DAI","BUSD","TUSD","USDP","PAX","UST","USTC","GUSD","FDUSD","EURS","EURT",
-                "USD","USDN","USDD"
+                "USDT","USDC","DAI","BUSD","TUSD","USDP","PAX","GUSD","FDUSD","EURS","EURT","USDN","USDD","USDE"
             };
 
-            bool IsLikelyStable(CryptoTopDTO c)
+            // Derivados/pegged/wrapped/liquid staking (principalmente de ETH/BTC)
+            var derivativeSyms = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "STETH","RETH","CBETH","WBTC","WETH","WBETH","AETHC","FRETH","FRXETH","ANKRETH","OSETH","SWETH","RSETH"
+            };
+
+            bool IsStable(CryptoTopDTO c)
             {
                 var sym = c.Symbol.Trim().ToUpperInvariant();
                 var name = c.Name.Trim().ToUpperInvariant();
 
                 if (stableSyms.Contains(sym)) return true;
-                if (name.Contains("STABLE") || name.Contains("USD ") || name.EndsWith(" USD") || name.Contains("USDT") || name.Contains("USDC"))
+                if (name.Contains(" STABLE") || name.Contains(" USDT") || name.Contains(" USDC") || name.Contains(" USD "))
                     return true;
 
                 var p = c.PriceUsd;
                 if (p >= 0.94m && p <= 1.06m) return true;
+                return false;
+            }
+
+            bool IsDerivative(CryptoTopDTO c)
+            {
+                var sym = c.Symbol.Trim().ToUpperInvariant();
+                var name = c.Name.Trim().ToUpperInvariant();
+
+                if (derivativeSyms.Contains(sym)) return true;
+
+                if (name.Contains("STAKED") || name.Contains("RESTAKED") || name.Contains("LIQUID STAKED"))
+                    return true;
+                if (name.StartsWith("WRAPPED ") || name.Contains(" WRAPPED "))
+                    return true;
+
+                if (name.Contains("LIDO STAKED ETHER")) return true; 
+                if (name.Contains("WRAPPED BITCOIN")) return true;  
+                if (name.Contains("WRAPPED ETHER")) return true;     
+                if (name.Contains("COINBASE WRAPPED STAKED ETH") || name.Contains("COINBASE STAKED ETH")) return true; 
 
                 return false;
             }
 
-            var filtered = raw.Where(c => !IsLikelyStable(c))
-                              .OrderBy(c => c.Rank)       // respetar market cap rank
-                              .ThenByDescending(c => c.PriceUsd)
-                              .Take(limit)
-                              .ToList();
+            var filtered = raw
+                .Where(c => !IsStable(c) && !IsDerivative(c))
+                .OrderBy(c => c.Rank)            
+                .ThenByDescending(c => c.PriceUsd)
+                .DistinctBy(c => c.Symbol.ToUpperInvariant())
+                .Take(limit)
+                .ToList();
 
-            _cache.Set(key, filtered, TimeSpan.FromMinutes(2));
+            _cache.Set(cacheKey, filtered, TimeSpan.FromMinutes(2));
             return filtered;
         }
+
 
 
     }
