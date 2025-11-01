@@ -1,34 +1,56 @@
-﻿using ApiClient;
+﻿using System.Net.Http.Json;
 using DTOs;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace Services
 {
     public class DolarService
     {
-        private readonly DolarApiClient _api;
-        private readonly IMemoryCache _cache;
+        private readonly HttpClient _http;
+        private const string BaseUrl = "https://dolarapi.com/v1";
 
-        private static readonly string CACHE_KEY = "dolar_quotes";
+        public DolarService(HttpClient http) => _http = http;
 
-        public DolarService(DolarApiClient api, IMemoryCache cache)
+        public async Task<List<DolarDTO>> GetCotizacionesAsync(CancellationToken ct = default)
         {
-            _api = api; _cache = cache;
+            var fromApi = await _http.GetFromJsonAsync<List<DolarDTO>>($"{BaseUrl}/dolares", ct);
+            return fromApi ?? new();
         }
 
-        public async Task<IEnumerable<DolarDTO>> GetCotizacionesAsync()
+        public async Task<decimal> GetTcAsync(string preferido = "CCL", CancellationToken ct = default)
         {
-            if (_cache.TryGetValue(CACHE_KEY, out List<DolarDTO>? cached) && cached is not null)
-                return cached;
-
-            var data = await _api.GetCotizacionesAsync();
-            // cachea 2 minutos
-            _cache.Set(CACHE_KEY, data, new MemoryCacheEntryOptions
+            if (preferido.Equals("CCL", StringComparison.OrdinalIgnoreCase))
             {
-                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(2)
-            });
+                var ccl = await _http.GetFromJsonAsync<DolarDTO>($"{BaseUrl}/ambito/dolares/contadoconliqui", ct);
+                if (ccl?.Venta is decimal v1 && v1 > 0) return v1;
+            }
+            else if (preferido.Equals("MEP", StringComparison.OrdinalIgnoreCase))
+            {
+                var mep = await _http.GetFromJsonAsync<DolarDTO>($"{BaseUrl}/ambito/dolares/bolsa", ct);
+                if (mep?.Venta is decimal v2 && v2 > 0) return v2;
+            }
 
-            return data;
+            var todos = await GetCotizacionesAsync(ct);
+            var elegido = todos.FirstOrDefault(d =>
+                preferido.Equals("CCL", StringComparison.OrdinalIgnoreCase)
+                    ? EsCCL(d.Nombre)
+                    : EsMEP(d.Nombre));
+
+            return elegido?.Venta ?? 0m;
+        }
+
+        private static bool EsCCL(string? s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            var n = s.Trim().ToLowerInvariant();
+            return n.Contains("contado") || n.Contains("liqui") || n.Contains("liquid") || n.Contains("ccl");
+        }
+
+        private static bool EsMEP(string? s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            var n = s.Trim().ToLowerInvariant();
+            // "Bolsa/MEP", "MEP", "dólar bolsa"
+            return n.Contains("mep") || n.Contains("bolsa");
         }
     }
 }

@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using ApiClient;
+﻿using ApiClient;
 using DTOs;
 
 namespace Services
@@ -24,7 +19,6 @@ namespace Services
             string dolarPreferido = "CCL",
             CancellationToken ct = default)
         {
-            // Normalizar y filtrar
             var cleanPairs = (pairs ?? Array.Empty<(string, string)>())
                 .Select(p => (localBA: (p.localBA ?? "").Trim().ToUpperInvariant(),
                               usa: (p.usa ?? "").Trim().ToUpperInvariant()))
@@ -34,12 +28,9 @@ namespace Services
 
             if (cleanPairs.Length == 0) return new();
 
-            var dolar = (await _dolar.GetCotizacionesAsync()).FirstOrDefault(d =>
-                d.Nombre.Equals(dolarPreferido, StringComparison.OrdinalIgnoreCase));
-            var tc = (decimal?)dolar?.Venta ?? 0m;
+            var tc = await _dolar.GetTcAsync(dolarPreferido, ct);
             if (tc <= 0m) return new();
 
-            // Una sola llamada a Yahoo con todos los símbolos (locales + USA)
             var allSymbols = cleanPairs.Select(p => p.localBA)
                                        .Concat(cleanPairs.Select(p => p.usa))
                                        .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -56,7 +47,7 @@ namespace Services
                 if (!bySymbol.TryGetValue(localBA, out var lq)) continue;
                 if (!bySymbol.TryGetValue(usa, out var uq)) continue;
 
-                var dto = new DualQuoteDTO
+                result.Add(new DualQuoteDTO
                 {
                     LocalSymbol = lq.Symbol,
                     LocalPriceARS = lq.Price,
@@ -64,9 +55,7 @@ namespace Services
                     UsPriceUSD = uq.Price,
                     UsedDollarRate = tc,
                     DollarRateName = dolarPreferido
-                };
-
-                result.Add(dto);
+                });
             }
 
             return result;
