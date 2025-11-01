@@ -10,8 +10,11 @@ builder.Services.AddSwaggerGen();
 
 // HTTP y dependencias
 builder.Services.AddHttpClient();
-builder.Services.AddScoped<DolarApiClient>();
-builder.Services.AddScoped<DolarService>();
+builder.Services.AddScoped<ApiClient.BinanceClient>();
+builder.Services.AddScoped<ApiClient.YahooFinanceClient>();
+builder.Services.AddScoped<Services.CryptoService>();
+builder.Services.AddScoped<Services.StocksService>();
+builder.Services.AddScoped<Services.CedearsService>();
 
 // CORS - Permitir acceso desde tu frontend
 var corsPolicy = "_finanzappCors";
@@ -48,6 +51,10 @@ app.UseCors(corsPolicy);
 
 #region Endpoints
 app.MapDolarEndpoints();
+app.MapCedearsEndpoints();
+app.MapCryptoEndpoints();
+app.MapStocksEndpoints();
+
 #endregion
 
 app.Run();
