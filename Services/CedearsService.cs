@@ -3,7 +3,7 @@ using DTOs;
 
 namespace Services
 {
-    public class CedearService
+    public class CedearsService
     {
         private readonly YahooFinanceClient _yahoo;
         private readonly DolarService _dolar;
@@ -16,7 +16,7 @@ namespace Services
             new() { CedearSymbol = "TSLA.BA", UsSymbol = "TSLA", Ratio = 15m },
         };
 
-        public CedearService(YahooFinanceClient yahoo, DolarService dolar)
+        public CedearsService(YahooFinanceClient yahoo, DolarService dolar)
         {
             _yahoo = yahoo; _dolar = dolar;
         }
