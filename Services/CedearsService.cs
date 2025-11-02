@@ -11,9 +11,15 @@ namespace Services
 
         private static readonly List<CedearRatioDTO> Ratios = new()
         {
-            new() { CedearSymbol = "AAPL.BA", UsSymbol = "AAPL", Ratio = 10m },
-            new() { CedearSymbol = "AMZN.BA", UsSymbol = "AMZN", Ratio = 36m },
-            new() { CedearSymbol = "TSLA.BA", UsSymbol = "TSLA", Ratio = 15m },
+            new() { CedearSymbol = "AAPL.BA",   UsSymbol = "AAPL",  Ratio = 10m },
+            new() { CedearSymbol = "AMZN.BA",   UsSymbol = "AMZN",  Ratio = 36m },
+            new() { CedearSymbol = "NVDA.BA",   UsSymbol = "NVDA",  Ratio = 20m }, 
+            new() { CedearSymbol = "MSFT.BA",   UsSymbol = "MSFT",  Ratio = 5m  }, 
+            new() { CedearSymbol = "GOOGL.BA",  UsSymbol = "GOOGL", Ratio = 5m  }, 
+            new() { CedearSymbol = "META.BA",   UsSymbol = "META",  Ratio = 12m }, 
+            new() { CedearSymbol = "TSLA.BA",   UsSymbol = "TSLA",  Ratio = 15m },
+            new() { CedearSymbol = "BRKB.BA",   UsSymbol = "BRK-B", Ratio = 10m },
+            new() { CedearSymbol = "KO.BA",     UsSymbol = "KO",    Ratio = 5m  },
         };
 
         public CedearsService(YahooFinanceClient yahoo, DolarService dolar)
