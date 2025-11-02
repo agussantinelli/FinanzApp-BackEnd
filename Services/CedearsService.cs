@@ -1,76 +1,63 @@
-﻿using ApiClient;
+﻿// Services/CedearsService.cs
+using ApiClient;
 using DTOs;
+using Microsoft.Extensions.Logging;
 
-namespace Services
+namespace Services;
+
+public sealed class CedearsService
 {
+    private readonly YahooFinanceClient _yahoo;
+    private readonly DolarService _dolar;
+    private readonly ILogger<CedearsService> _log;
 
-    public class CedearsService
+    public CedearsService(YahooFinanceClient yahoo, DolarService dolar, ILogger<CedearsService> log)
     {
-        private readonly YahooFinanceClient _yahoo;
-        private readonly DolarService _dolar;
+        _yahoo = yahoo;
+        _dolar = dolar;
+        _log = log;
+    }
 
-        private static readonly List<CedearRatioDTO> Ratios = new()
+    public sealed record CedearReq(string cedearSymbol, string usSymbol, decimal? ratio);
+
+    public async Task<List<DualQuoteDTO>> GetCedearQuotesAsync(
+        IEnumerable<CedearReq> reqs,
+        string dolarPreferido,
+        CancellationToken ct = default)
+    {
+        var (tc, tcName) = await _dolar.GetTcAsync(dolarPreferido, ct);
+
+        var symbols = reqs
+            .SelectMany(r => new[] { r.cedearSymbol, r.usSymbol })
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var quotes = await _yahoo.GetQuotesAsync(symbols, ct);
+
+        var list = new List<DualQuoteDTO>();
+        foreach (var r in reqs)
         {
-            new() { CedearSymbol = "AAPL.BA",   UsSymbol = "AAPL",  Ratio = 10m },
-            new() { CedearSymbol = "AMZN.BA",   UsSymbol = "AMZN",  Ratio = 36m },
-            new() { CedearSymbol = "NVDA.BA",   UsSymbol = "NVDA",  Ratio = 20m }, 
-            new() { CedearSymbol = "MSFT.BA",   UsSymbol = "MSFT",  Ratio = 5m  }, 
-            new() { CedearSymbol = "GOOGL.BA",  UsSymbol = "GOOGL", Ratio = 5m  }, 
-            new() { CedearSymbol = "META.BA",   UsSymbol = "META",  Ratio = 12m }, 
-            new() { CedearSymbol = "TSLA.BA",   UsSymbol = "TSLA",  Ratio = 15m },
-            new() { CedearSymbol = "BRKB.BA",   UsSymbol = "BRK-B", Ratio = 10m },
-            new() { CedearSymbol = "KO.BA",     UsSymbol = "KO",    Ratio = 5m  },
-        };
+            quotes.TryGetValue(r.cedearSymbol, out var cedearArs);
+            quotes.TryGetValue(r.usSymbol, out var usUsd);
 
-        public CedearsService(YahooFinanceClient yahoo, DolarService dolar)
-        {
-            _yahoo = yahoo;
-            _dolar = dolar;
-        }
+            // ratio: primero el provisto, si no, intento catálogo interno (opcional)
+            decimal? ratio = r.ratio;
+            if (ratio is null && CedearsRatios.TryGetRatio(r.cedearSymbol, out var rx))
+                ratio = rx;
 
-        public async Task<List<DualQuoteDTO>> GetCedearDualsAsync(
-            string dolarPreferido = "CCL",
-            CancellationToken ct = default)
-        {
-            if (Ratios.Count == 0) return new();
-
-            var tc = await _dolar.GetTcAsync(dolarPreferido, ct);
-            if (tc <= 0m) return new();
-
-            var all = Ratios.Select(r => r.CedearSymbol)
-                            .Concat(Ratios.Select(r => r.UsSymbol))
-                            .Where(s => !string.IsNullOrWhiteSpace(s))
-                            .Select(s => s!.Trim().ToUpperInvariant())
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToList();
-
-            if (all.Count == 0) return new();
-
-            var quotes = await _yahoo.GetQuotesAsync(all, ct);
-            if (quotes.Count == 0) return new();
-
-            var bySymbol = quotes.ToDictionary(q => q.Symbol, StringComparer.OrdinalIgnoreCase);
-
-            var list = new List<DualQuoteDTO>(Ratios.Count);
-            foreach (var r in Ratios)
+            list.Add(new DualQuoteDTO
             {
-                if (r.Ratio <= 0m) continue;
-                if (!bySymbol.TryGetValue(r.CedearSymbol, out var cq)) continue; // CEDEAR (ARS)
-                if (!bySymbol.TryGetValue(r.UsSymbol, out var uq)) continue;     // USA (USD)
-
-                list.Add(new DualQuoteDTO
-                {
-                    LocalSymbol = cq.Symbol,
-                    LocalPriceARS = cq.Price,
-                    UsSymbol = uq.Symbol,
-                    UsPriceUSD = uq.Price,
-                    UsedDollarRate = tc,
-                    DollarRateName = dolarPreferido,
-                    CedearRatio = r.Ratio
-                });
-            }
-
-            return list;
+                LocalSymbol = r.cedearSymbol,
+                LocalPriceARS = cedearArs,
+                UsSymbol = r.usSymbol,
+                UsPriceUSD = usUsd,
+                CedearRatio = ratio,
+                UsedDollarRate = tc,        // <<< usar r.tc, no la tupla completa
+                DollarRateName = tcName
+            });
         }
+
+        return list;
     }
 }

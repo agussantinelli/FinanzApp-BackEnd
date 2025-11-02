@@ -12,7 +12,20 @@ builder.Services.AddSwaggerGen();
 // Cache
 builder.Services.AddMemoryCache();
 
+builder.Services.AddHttpClient<DolarService>(c =>
+{
+    c.BaseAddress = new Uri("https://dolarapi.com/v1/");
+});
+
+
 builder.Services.AddHttpClient<DolarApiClient>();
+
+builder.Services.AddHttpClient<DolarService>(c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(6);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("FinanzApp/1.0");
+    c.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+});
 
 builder.Services.AddHttpClient<CoinGeckoClient>(c =>
 {

@@ -1,20 +1,17 @@
-﻿using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Services;
+﻿using DTOs;
 
-namespace WebAPI.Endpoints
+public static class DolarEndpoints
 {
-    public static class DolarEndpoints
+    public static IEndpointRouteBuilder MapDolarEndpoints(this IEndpointRouteBuilder app)
     {
-        public static void MapDolarEndpoints(this WebApplication app)
+        app.MapGet("/api/dolar/cotizaciones", async (DolarService svc, CancellationToken ct) =>
         {
-            var group = app.MapGroup("/api/dolar");
+            var data = await svc.GetCotizacionesAsync(ct);
+            return Results.Ok(data);
+        })
+        .WithName("GetDolarCotizaciones")
+        .WithTags("Dólar");
 
-            group.MapGet("/cotizaciones", async (DolarService service) =>
-            {
-                var cotizaciones = await service.GetCotizacionesAsync();
-                return Results.Ok(cotizaciones);
-            });
-        }
+        return app;
     }
 }
