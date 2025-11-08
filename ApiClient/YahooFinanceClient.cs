@@ -1,6 +1,5 @@
-﻿// ApiClient/YahooFinanceClient.cs
-using System.Net;
-using System.Net.Http;
+﻿using System.Net;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
@@ -17,19 +16,26 @@ public sealed class YahooFinanceClient
         _log = log;
         _http.Timeout = TimeSpan.FromSeconds(10);
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+        _http.DefaultRequestHeaders.Accept.ParseAdd("application/json,text/plain,*/*");
+        _http.DefaultRequestHeaders.AcceptLanguage.ParseAdd("es-AR,es;q=0.9,en-US;q=0.8,en;q=0.7");
+        _http.DefaultRequestHeaders.Referrer = new Uri("https://finance.yahoo.com/");
     }
 
     public async Task<Dictionary<string, decimal>> GetQuotesAsync(IEnumerable<string> symbols, CancellationToken ct = default)
     {
-        var syms = symbols.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var syms = symbols
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         var result = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
 
-        // 1) intento batch (puede devolver 401)
+        // 1) Batch (puede devolver 401/403)
         var joined = string.Join(",", syms.Select(Uri.EscapeDataString));
         var batchEndpoints = new[]
         {
             $"https://query2.finance.yahoo.com/v7/finance/quote?symbols={joined}",
-            $"https://query1.finance.yahoo.com/v7/finance/quote?symbols={joined}"
+            $"https://query1.finance.yahoo.com/v7/finance/quote?symbols={joined}",
         };
 
         foreach (var url in batchEndpoints)
@@ -40,18 +46,12 @@ public sealed class YahooFinanceClient
                 if (resp.StatusCode == HttpStatusCode.OK)
                 {
                     var json = await resp.Content.ReadAsStringAsync(ct);
-                    // parse muy simple para regularMarketPrice (evito depender de JSON lib acá)
-                    // Mejor si tenés System.Text.Json: lo dejo con regex para no sumar dependencias.
-                    var prices = ExtractBatchPrices(json, syms);
+                    var prices = ExtractBatchPricesBySymbol(json); // ✅ mapeo por symbol
                     foreach (var kv in prices)
                         result[kv.Key] = kv.Value;
-                    // puedo completar faltantes por HTML abajo
-                    break;
+                    break; // ya obtuve un batch OK; sigo con faltantes
                 }
-                else
-                {
-                    _log.LogWarning("Yahoo batch {Url} devolvió {Code}", url, (int)resp.StatusCode);
-                }
+                _log.LogWarning("Yahoo batch {Url} devolvió {Code}", url, (int)resp.StatusCode);
             }
             catch (Exception ex)
             {
@@ -59,71 +59,184 @@ public sealed class YahooFinanceClient
             }
         }
 
-        // 2) fallback por cada símbolo via HTML (para los que falten o todos si no anduvo batch)
-        foreach (var s in syms)
-        {
-            if (result.ContainsKey(s)) continue;
+        // 2) Faltantes → fallback por símbolo (Chart API v8 → HTML ?p=)
+        var missing = syms.Where(s => !result.ContainsKey(s)).ToArray();
+        if (missing.Length > 0)
+            _log.LogInformation("Yahoo batch no trajo {Count} símbolos; voy a fallbacks: {Missing}",
+                missing.Length, string.Join(", ", missing));
 
-            var url = $"https://finance.yahoo.com/quote/{Uri.EscapeDataString(s)}";
+        foreach (var s in missing)
+        {
+            // 2.a) Chart API v8 (suele funcionar aún con bloqueos del quote)
+            var chartUrls = new[]
+            {
+                $"https://query2.finance.yahoo.com/v8/finance/chart/{Uri.EscapeDataString(s)}?range=1d&interval=1d",
+                $"https://query1.finance.yahoo.com/v8/finance/chart/{Uri.EscapeDataString(s)}?range=1d&interval=1d",
+            };
+
+            bool done = false;
+            foreach (var cu in chartUrls)
+            {
+                try
+                {
+                    using var resp = await _http.GetAsync(cu, ct);
+                    if (resp.StatusCode != HttpStatusCode.OK) continue;
+
+                    var json = await resp.Content.ReadAsStringAsync(ct);
+                    var p = ExtractPriceFromChartJson(json);
+                    if (p is decimal pv)
+                    {
+                        result[s] = pv;
+                        done = true;
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _log.LogWarning(ex, "Yahoo chart v8 falló para {Symbol} ({Url})", s, cu);
+                }
+            }
+            if (done) { await Task.Delay(120, ct); continue; }
+
+            // 2.b) HTML con ?p=SYMBOL (evita muchos 404/consent)
+            var htmlUrl = $"https://finance.yahoo.com/quote/{Uri.EscapeDataString(s)}?p={Uri.EscapeDataString(s)}";
             try
             {
-                using var resp = await _http.GetAsync(url, ct);
-                if (resp.StatusCode != HttpStatusCode.OK)
-                    continue;
-
-                var html = await resp.Content.ReadAsStringAsync(ct);
-                var price = ExtractPriceFromHtml(html);
-                if (price is not null)
-                    result[s] = price.Value;
+                using var resp = await _http.GetAsync(htmlUrl, ct);
+                if (resp.StatusCode == HttpStatusCode.OK)
+                {
+                    var html = await resp.Content.ReadAsStringAsync(ct);
+                    var price = ExtractPriceFromHtml(html);
+                    if (price is not null)
+                    {
+                        result[s] = price.Value;
+                        done = true;
+                    }
+                }
+                else
+                {
+                    _log.LogWarning("Yahoo HTML devolvió {Code} para {Symbol}", (int)resp.StatusCode, s);
+                }
             }
             catch (Exception ex)
             {
                 _log.LogWarning(ex, "Yahoo HTML falló para {Symbol}", s);
             }
 
-            // evitar rate limit
-            await Task.Delay(150, ct);
+            await Task.Delay(120, ct); // evitar rate limit
         }
 
         return result;
     }
 
-    private static readonly Regex RmPriceRegex = new("\"regularMarketPrice\"\\s*:\\s*\\{[^}]*?\"raw\"\\s*:\\s*(?<num>[-+]?[0-9]*\\.?[0-9]+)", RegexOptions.Compiled);
-    private static Dictionary<string, decimal> ExtractBatchPrices(string json, string[] syms)
+    // ---------- Helpers ----------
+
+    private static Dictionary<string, decimal> ExtractBatchPricesBySymbol(string json)
     {
-        // súper simple: encuentra la primera coincidencia para cada símbolo y toma el primer "regularMarketPrice.raw"
         var dict = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
-        // Sugerencia: si querés fino, parsea con System.Text.Json a la ruta response.result[*].regularMarketPrice.raw
-        // Para mantener liviano, hago un regex global y asigno en orden.
-        var matches = RmPriceRegex.Matches(json);
-        var idx = 0;
-        foreach (Match m in matches.Cast<Match>())
+
+        try
         {
-            if (idx >= syms.Length) break;
-            if (decimal.TryParse(m.Groups["num"].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var val))
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("quoteResponse", out var qr)) return dict;
+            if (!qr.TryGetProperty("result", out var result)) return dict;
+
+            foreach (var item in result.EnumerateArray())
             {
-                // ¡Ojo! El orden de Yahoo no necesariamente coincide con syms. Si necesitás 100% match, parsea JSON.
-                // En la práctica, muchas veces coincide. Para estar seguro, reemplazá este método por System.Text.Json.
-                // Dejo un fallback conservador:
-                dict[syms[idx]] = val;
-                idx++;
+                if (!item.TryGetProperty("symbol", out var symEl)) continue;
+                var sym = symEl.GetString();
+                if (string.IsNullOrWhiteSpace(sym)) continue;
+
+                decimal? price = null;
+
+                if (item.TryGetProperty("regularMarketPrice", out var rmp))
+                {
+                    // Puede venir como objeto { raw, fmt } o número directo
+                    if (rmp.ValueKind == JsonValueKind.Object && rmp.TryGetProperty("raw", out var raw))
+                    {
+                        if (raw.ValueKind == JsonValueKind.Number)
+                            price = (decimal)raw.GetDouble();
+                        else if (raw.ValueKind == JsonValueKind.String &&
+                                 decimal.TryParse(raw.GetString(),
+                                     System.Globalization.NumberStyles.Any,
+                                     System.Globalization.CultureInfo.InvariantCulture,
+                                     out var valStr))
+                            price = valStr;
+                    }
+                    else if (rmp.ValueKind == JsonValueKind.Number)
+                    {
+                        price = (decimal)rmp.GetDouble();
+                    }
+                }
+
+                if (price is decimal p)
+                    dict[sym] = p;
             }
         }
+        catch
+        {
+            // Si cambia el JSON, devolvemos vacío y fallbacks completan.
+        }
+
         return dict;
+    }
+
+    // Chart v8 → chart.result[0].meta.regularMarketPrice
+    private static decimal? ExtractPriceFromChartJson(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("chart", out var chart)) return null;
+            if (!chart.TryGetProperty("result", out var resArray)) return null;
+            var first = resArray.EnumerateArray().FirstOrDefault();
+            if (first.ValueKind == JsonValueKind.Undefined) return null;
+            if (!first.TryGetProperty("meta", out var meta)) return null;
+
+            // regularMarketPrice puede ser number o string
+            if (meta.TryGetProperty("regularMarketPrice", out var rmp))
+            {
+                if (rmp.ValueKind == JsonValueKind.Number)
+                    return (decimal)rmp.GetDouble();
+
+                if (rmp.ValueKind == JsonValueKind.String &&
+                    decimal.TryParse(rmp.GetString(),
+                        System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var valStr))
+                    return valStr;
+            }
+        }
+        catch
+        {
+            // ignorar, uso el siguiente fallback
+        }
+        return null;
     }
 
     private static decimal? ExtractPriceFromHtml(string html)
     {
-        // Busca <fin-streamer data-field="regularMarketPrice" ...>NUM</fin-streamer>
-        var m = Regex.Match(html, "<fin-streamer[^>]*data-field=\"regularMarketPrice\"[^>]*>(?<num>[-+]?[0-9]*\\.?[0-9]+)</fin-streamer>", RegexOptions.IgnoreCase);
-        if (m.Success && decimal.TryParse(m.Groups["num"].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var val))
-            return val;
+        var m = Regex.Match(
+            html,
+            "<fin-streamer[^>]*data-field=\"regularMarketPrice\"[^>]*>(?<num>[-+]?[0-9]*\\.?[0-9]+)</fin-streamer>",
+            RegexOptions.IgnoreCase);
+        if (m.Success && decimal.TryParse(m.Groups["num"].Value,
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var val1))
+            return val1;
 
-        // fallback: busca "regularMarketPrice":{"raw":NUM}
         var m2 = RmPriceRegex.Match(html);
-        if (m2.Success && decimal.TryParse(m2.Groups["num"].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var val2))
+        if (m2.Success && decimal.TryParse(m2.Groups["num"].Value,
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var val2))
             return val2;
 
         return null;
     }
+
+    private static readonly Regex RmPriceRegex =
+        new("\"regularMarketPrice\"\\s*:\\s*\\{[^}]*?\"raw\"\\s*:\\s*(?<num>[-+]?[0-9]*\\.?[0-9]+)",
+            RegexOptions.Compiled);
 }
