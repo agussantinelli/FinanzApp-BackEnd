@@ -23,5 +23,7 @@ public static class CedearsDefaults
         new CedearReq("GGAL.BA",  "GGAL",  null),
         new CedearReq("SUPV.BA",  "SUPV",  null),
         new CedearReq("CEPU.BA",  "CEPU",  null),
+        new CedearReq("LOMA.BA",  "LOMA",  null),
+
     };
 }
