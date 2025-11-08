@@ -48,7 +48,7 @@ namespace Services
             // Derivados/pegged/wrapped/liquid staking (principalmente de ETH/BTC)
             var derivativeSyms = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "STETH","RETH","CBETH","WBTC","WETH","WBETH","AETHC","FRETH","FRXETH","ANKRETH","OSETH","SWETH","RSETH"
+                "STETH","RETH", "WBT","CBETH","WBTC","WETH","WBETH","AETHC","FRETH","FRXETH","ANKRETH","OSETH","SWETH","RSETH"
             };
 
             bool IsStable(CryptoTopDTO c)
@@ -72,7 +72,7 @@ namespace Services
 
                 if (sym is "ETH" or "BTC") return false;
 
-                if (sym is "STETH" or "WETH" or "WBTC" or "CBETH" or "RETH" or "WBETH" or "FRXETH" or "RSETH" or "OSETH" or "ANKRETH")
+                if (sym is "STETH" or "WETH" or "WBTC" or "CBETH" or "RETH" or "WBETH" or "WBT" or "FRXETH" or "RSETH" or "OSETH" or "ANKRETH")
                     return true;
 
                 if (name.Contains("STETH") ||
