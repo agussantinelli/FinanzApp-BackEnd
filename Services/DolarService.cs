@@ -73,8 +73,8 @@ public class DolarService
         TryAdd("oficial", "Oficial");
         TryAdd("blue", "Blue");
         TryAdd("tarjeta", "Tarjeta", "Qatar", "Solidario", "Turista");
-        TryAdd("bolsa", "Bolsa"); // => MEP
-        TryAdd("contadoconliqui", "Contado con Liquidación", "Contado con Liquidacion"); // => CCL
+        TryAdd("bolsa", "Bolsa"); // MEP
+        TryAdd("contadoconliqui", "Contado con Liquidación", "Contado con Liquidacion"); // CCL
         TryAdd("mayorista", "Mayorista");
 
         // El resto (si viene algo extra)
@@ -97,10 +97,6 @@ public class DolarService
         return salida;
     }
 
-    /// <summary>
-    /// Devuelve el tipo de cambio elegido (por defecto "CCL").
-    /// Retorna tupla: (tc, nombre) usando normalmente el precio de VENTA.
-    /// </summary>
     public async Task<(decimal tc, string nombre)> GetTcAsync(string preferido = "CCL", CancellationToken ct = default)
     {
         var lista = await GetCotizacionesAsync(ct);
@@ -109,7 +105,6 @@ public class DolarService
         var elegido = lista.FirstOrDefault(x =>
             string.Equals(x.Nombre, preferido, StringComparison.OrdinalIgnoreCase));
 
-        // Fallbacks razonables
         if (elegido.Nombre is null || elegido.Venta <= 0)
         {
             // si pediste CCL y no hay, probá MEP, y viceversa

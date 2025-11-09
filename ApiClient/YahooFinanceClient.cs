@@ -30,7 +30,6 @@ public sealed class YahooFinanceClient
 
         var result = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
 
-        // 1) Batch (puede devolver 401/403)
         var joined = string.Join(",", syms.Select(Uri.EscapeDataString));
         var batchEndpoints = new[]
         {
@@ -46,10 +45,10 @@ public sealed class YahooFinanceClient
                 if (resp.StatusCode == HttpStatusCode.OK)
                 {
                     var json = await resp.Content.ReadAsStringAsync(ct);
-                    var prices = ExtractBatchPricesBySymbol(json); // ✅ mapeo por symbol
+                    var prices = ExtractBatchPricesBySymbol(json); 
                     foreach (var kv in prices)
                         result[kv.Key] = kv.Value;
-                    break; // ya obtuve un batch OK; sigo con faltantes
+                    break;
                 }
                 _log.LogWarning("Yahoo batch {Url} devolvió {Code}", url, (int)resp.StatusCode);
             }
@@ -59,7 +58,6 @@ public sealed class YahooFinanceClient
             }
         }
 
-        // 2) Faltantes → fallback por símbolo (Chart API v8 → HTML ?p=)
         var missing = syms.Where(s => !result.ContainsKey(s)).ToArray();
         if (missing.Length > 0)
             _log.LogInformation("Yahoo batch no trajo {Count} símbolos; voy a fallbacks: {Missing}",
@@ -67,7 +65,6 @@ public sealed class YahooFinanceClient
 
         foreach (var s in missing)
         {
-            // 2.a) Chart API v8 (suele funcionar aún con bloqueos del quote)
             var chartUrls = new[]
             {
                 $"https://query2.finance.yahoo.com/v8/finance/chart/{Uri.EscapeDataString(s)}?range=1d&interval=1d",
@@ -98,7 +95,6 @@ public sealed class YahooFinanceClient
             }
             if (done) { await Task.Delay(120, ct); continue; }
 
-            // 2.b) HTML con ?p=SYMBOL (evita muchos 404/consent)
             var htmlUrl = $"https://finance.yahoo.com/quote/{Uri.EscapeDataString(s)}?p={Uri.EscapeDataString(s)}";
             try
             {
@@ -129,7 +125,7 @@ public sealed class YahooFinanceClient
         return result;
     }
 
-    // ---------- Helpers ----------
+    // Helpers 
 
     private static Dictionary<string, decimal> ExtractBatchPricesBySymbol(string json)
     {
@@ -181,7 +177,6 @@ public sealed class YahooFinanceClient
         return dict;
     }
 
-    // Chart v8 → chart.result[0].meta.regularMarketPrice
     private static decimal? ExtractPriceFromChartJson(string json)
     {
         try
