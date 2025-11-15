@@ -24,12 +24,13 @@ public static class DbSeeder
         await SeedLocalidadesAsync(context, http, ct);
     }
 
+    // PAISES (RESTCOUNTRIES, NOMBRE EN ESPAÑOL) 
     private static async Task SeedPaisesAsync(DBFinanzasContext context, HttpClient http, CancellationToken ct)
     {
         if (await context.Paises.AnyAsync(ct))
             return;
 
-        const string url = "https://restcountries.com/v3.1/all?fields=name,cca2,cca3";
+        const string url = "https://restcountries.com/v3.1/all?fields=name,translations,cca2,cca3";
 
         HttpResponseMessage resp;
         try
@@ -61,9 +62,15 @@ public static class DbSeeder
 
             var iso2 = c.Cca2.ToUpperInvariant();
             var iso3 = c.Cca3.ToUpperInvariant();
-            var name = c.Name?.Common?.Trim();
-            if (string.IsNullOrWhiteSpace(name))
-                name = iso3;
+
+            var nameEs = c.Translations?.Spa?.Common?.Trim();
+            var nameEn = c.Name?.Common?.Trim();
+
+            var name = !string.IsNullOrWhiteSpace(nameEs)
+                ? nameEs
+                : !string.IsNullOrWhiteSpace(nameEn)
+                    ? nameEn
+                    : iso3;
 
             if (list.Any(p => p.CodigoIso2 == iso2))
                 continue;
@@ -88,6 +95,7 @@ public static class DbSeeder
         Console.WriteLine($"[Seeder] Seed de Paises completado. Total: {list.Count}");
     }
 
+    //  PROVINCIAS ARGENTINAS (GEOREF) 
     private static async Task SeedProvinciasAsync(DBFinanzasContext context, HttpClient http, CancellationToken ct)
     {
         if (await context.Provincias.AnyAsync(ct))
@@ -146,6 +154,7 @@ public static class DbSeeder
         Console.WriteLine($"[Seeder] Seed de Provincias completado. Total: {provincias.Count}");
     }
 
+    // LOCALIDADES ARGENTINAS (GEOREF) 
     private static async Task SeedLocalidadesAsync(DBFinanzasContext context, HttpClient http, CancellationToken ct)
     {
         if (await context.Localidades.AnyAsync(ct))
@@ -222,16 +231,29 @@ public static class DbSeeder
         Console.WriteLine($"[Seeder] Seed de Localidades completado. Total: {agrupadas.Count}");
     }
 
+    // DTOs internos 
     private sealed class RestCountryDto
     {
         public NameDto? Name { get; set; }
         public string Cca2 { get; set; } = string.Empty;
         public string Cca3 { get; set; } = string.Empty;
+        public RestCountryTranslationsDto? Translations { get; set; }
     }
 
     private sealed class NameDto
     {
         public string Common { get; set; } = string.Empty;
+    }
+
+    private sealed class RestCountryTranslationsDto
+    {
+        public RestCountrySpaDto? Spa { get; set; }
+    }
+
+    private sealed class RestCountrySpaDto
+    {
+        public string Common { get; set; } = string.Empty;
+        public string Official { get; set; } = string.Empty;
     }
 
     private sealed class GeorefProvinciaResponse
