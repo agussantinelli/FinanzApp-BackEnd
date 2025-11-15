@@ -24,6 +24,67 @@ public class DBFinanzasContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Entity<Pais>(entity =>
+        {
+            entity.ToTable("Paises");
+
+            entity.Property(p => p.Nombre)
+                  .HasMaxLength(200)
+                  .IsRequired();
+
+            entity.Property(p => p.CodigoIso2)
+                  .HasMaxLength(2)
+                  .IsRequired()
+                  .IsFixedLength();
+
+            entity.Property(p => p.CodigoIso3)
+                  .HasMaxLength(3)
+                  .IsRequired()
+                  .IsFixedLength();
+
+            entity.Property(p => p.EsArgentina)
+                  .HasColumnType("bit")
+                  .HasDefaultValue(false);
+
+            entity.HasIndex(p => p.CodigoIso2)
+                  .IsUnique()
+                  .HasDatabaseName("UX_Paises_Iso2");
+
+            entity.HasIndex(p => p.CodigoIso3)
+                  .IsUnique()
+                  .HasDatabaseName("UX_Paises_Iso3");
+        });
+
+        modelBuilder.Entity<Provincia>(entity =>
+        {
+            entity.ToTable("Provincias");
+
+            entity.Property(p => p.Nombre)
+                  .HasMaxLength(200)
+                  .IsRequired();
+
+            entity.HasOne(p => p.Pais)
+                  .WithMany(pais => pais.Provincias)
+                  .HasForeignKey(p => p.PaisId)
+                  .OnDelete(DeleteBehavior.Cascade)
+                  .HasConstraintName("FK_Provincias_Pais");
+        });
+
+        modelBuilder.Entity<Localidad>(entity =>
+        {
+            entity.ToTable("Localidades");
+
+            entity.Property(l => l.Nombre)
+                  .HasMaxLength(200)
+                  .IsRequired();
+
+            entity.HasOne(l => l.Provincia)
+                  .WithMany(p => p.Localidades)
+                  .HasForeignKey(l => l.ProvinciaId)
+                  .OnDelete(DeleteBehavior.Cascade)
+                  .HasConstraintName("FK_Localidades_Provincia");
+        });
+
         modelBuilder.Entity<Persona>(entity =>
         {
             entity.ToTable("Personas");
@@ -44,101 +105,33 @@ public class DBFinanzasContext : DbContext
                   .IsUnique();
 
             entity.Property(p => p.FechaAlta)
-                  .HasColumnType("datetime2")
-                  .HasDefaultValueSql("SYSDATETIME()")
-                  .IsRequired();
+                  .HasColumnType("datetime2");
 
-            entity.Property(p => p.FechaNac)
+            entity.Property(p => p.FechaNacimiento)
                   .HasColumnType("datetime2")
                   .IsRequired();
 
-            // País de residencia
+            entity.Property(p => p.EsResidenteArgentina)
+                  .HasColumnType("bit")
+                  .IsRequired();
+
+            entity.HasOne(p => p.Nacionalidad)
+                  .WithMany(pais => pais.PersonasNacionalidad)
+                  .HasForeignKey(p => p.NacionalidadId)
+                  .OnDelete(DeleteBehavior.Restrict)
+                  .HasConstraintName("FK_Personas_PaisNacionalidad");
+
             entity.HasOne(p => p.PaisResidencia)
-                  .WithMany(pa => pa.PersonasResidencia)
+                  .WithMany(pais => pais.PersonasResidencia)
                   .HasForeignKey(p => p.PaisResidenciaId)
                   .OnDelete(DeleteBehavior.Restrict)
                   .HasConstraintName("FK_Personas_PaisResidencia");
 
-            // País de nacionalidad
-            entity.HasOne(p => p.PaisNacionalidad)
-                  .WithMany(pa => pa.PersonasNacionalidad)
-                  .HasForeignKey(p => p.PaisNacionalidadId)
+            entity.HasOne(p => p.LocalidadResidencia)
+                  .WithMany(l => l.PersonasResidencia)
+                  .HasForeignKey(p => p.LocalidadResidenciaId)
                   .OnDelete(DeleteBehavior.Restrict)
-                  .HasConstraintName("FK_Personas_PaisNacionalidad");
-
-            entity.HasOne(p => p.Provincia)
-                  .WithMany(pr => pr.Personas)
-                  .HasForeignKey(p => p.ProvinciaId)
-                  .OnDelete(DeleteBehavior.Restrict)
-                  .HasConstraintName("FK_Personas_Provincia");
-
-            entity.HasOne(p => p.Localidad)
-                  .WithMany(l => l.Personas)
-                  .HasForeignKey(p => p.LocalidadId)
-                  .OnDelete(DeleteBehavior.Restrict)
-                  .HasConstraintName("FK_Personas_Localidad");
-
-            // Propiedad calculada: no se mapea
-            entity.Ignore(p => p.EsResidenteArgentina);
-        });
-
-        modelBuilder.Entity<Pais>(entity =>
-        {
-            entity.ToTable("Paises");
-
-            entity.Property(p => p.Nombre)
-                  .HasMaxLength(150)
-                  .IsRequired();
-
-            entity.Property(p => p.CodigoIso2)
-                  .HasMaxLength(2)
-                  .IsRequired();
-
-            entity.Property(p => p.CodigoIso3)
-                  .HasMaxLength(3)
-                  .IsRequired();
-
-            entity.Property(p => p.EsArgentina)
-                  .HasColumnType("bit")
-                  .HasDefaultValue(false);
-
-            entity.HasIndex(p => p.CodigoIso2)
-                  .IsUnique()
-                  .HasDatabaseName("UX_Paises_Iso2");
-
-            entity.HasIndex(p => p.CodigoIso3)
-                  .IsUnique()
-                  .HasDatabaseName("UX_Paises_Iso3");
-        });
-
-        modelBuilder.Entity<Provincia>(entity =>
-        {
-            entity.ToTable("Provincias");
-
-            entity.Property(p => p.Nombre)
-                  .HasMaxLength(150)
-                  .IsRequired();
-
-            entity.HasOne(p => p.Pais)
-                  .WithMany(pa => pa.Provincias)
-                  .HasForeignKey(p => p.PaisId)
-                  .OnDelete(DeleteBehavior.Cascade)
-                  .HasConstraintName("FK_Provincias_Pais");
-        });
-
-        modelBuilder.Entity<Localidad>(entity =>
-        {
-            entity.ToTable("Localidades");
-
-            entity.Property(l => l.Nombre)
-                  .HasMaxLength(150)
-                  .IsRequired();
-
-            entity.HasOne(l => l.Provincia)
-                  .WithMany(p => p.Localidades)
-                  .HasForeignKey(l => l.ProvinciaId)
-                  .OnDelete(DeleteBehavior.Cascade)
-                  .HasConstraintName("FK_Localidades_Provincia");
+                  .HasConstraintName("FK_Personas_LocalidadResidencia");
         });
 
         modelBuilder.Entity<Activo>(entity =>
