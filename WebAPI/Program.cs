@@ -1,5 +1,7 @@
 ﻿using System.Net;
 using ApiClient;
+using Data;
+using Microsoft.EntityFrameworkCore;
 using Services;
 using WebAPI.Endpoints;
 
@@ -17,6 +19,9 @@ builder.Services.AddHttpClient<DolarService>(c =>
     c.BaseAddress = new Uri("https://dolarapi.com/v1/");
 });
 
+
+builder.Services.AddDbContext<DBFinanzasContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("FinanzAppDb")));
 
 builder.Services.AddHttpClient<DolarApiClient>();
 
