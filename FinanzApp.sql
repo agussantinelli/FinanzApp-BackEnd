@@ -1,10 +1,59 @@
-CREATE TABLE Personas (
-    Id              INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre          NVARCHAR(100) NOT NULL,
-    Apellido        NVARCHAR(100) NOT NULL,
-    Email           NVARCHAR(200) NOT NULL UNIQUE,
-    FechaAlta       DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+CREATE TABLE Paises (
+    Id           INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre       NVARCHAR(150) NOT NULL,
+    CodigoIso2   NVARCHAR(2)   NOT NULL,   -- AR, US, BR...
+    CodigoIso3   NVARCHAR(3)   NOT NULL,   -- ARG, USA, BRA...
+    EsArgentina  BIT NOT NULL DEFAULT 0
 );
+
+CREATE UNIQUE INDEX UX_Paises_Iso2 ON Paises(CodigoIso2);
+CREATE UNIQUE INDEX UX_Paises_Iso3 ON Paises(CodigoIso3);
+
+CREATE TABLE Provincias (
+    Id      INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre  NVARCHAR(150) NOT NULL,
+    PaisId  INT NOT NULL,
+
+    CONSTRAINT FK_Provincias_Pais
+        FOREIGN KEY (PaisId) REFERENCES Paises(Id)
+);
+
+CREATE TABLE Localidades (
+    Id          INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre      NVARCHAR(150) NOT NULL,
+    ProvinciaId INT NOT NULL,
+
+    CONSTRAINT FK_Localidades_Provincia
+        FOREIGN KEY (ProvinciaId) REFERENCES Provincias(Id)
+);
+
+CREATE TABLE Personas (
+    Id                  INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre              NVARCHAR(100) NOT NULL,
+    Apellido            NVARCHAR(100) NOT NULL,
+    Email               NVARCHAR(200) NOT NULL UNIQUE,
+    FechaAlta           DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FechaNac            DATETIME2 NOT NULL,
+
+    PaisResidenciaId    INT NOT NULL,
+    PaisNacionalidadId  INT NOT NULL,
+    ProvinciaId         INT NULL,
+    LocalidadId         INT NULL,
+
+    CONSTRAINT FK_Personas_PaisResidencia
+        FOREIGN KEY (PaisResidenciaId) REFERENCES Paises(Id),
+
+    CONSTRAINT FK_Personas_PaisNacionalidad
+        FOREIGN KEY (PaisNacionalidadId) REFERENCES Paises(Id),
+
+    CONSTRAINT FK_Personas_Provincia
+        FOREIGN KEY (ProvinciaId) REFERENCES Provincias(Id),
+
+    CONSTRAINT FK_Personas_Localidad
+        FOREIGN KEY (LocalidadId) REFERENCES Localidades(Id)
+);
+
+CREATE UNIQUE INDEX IX_Personas_Email ON Personas(Email);
 
 CREATE TABLE Activos (
     Id              INT IDENTITY(1,1) PRIMARY KEY,
@@ -36,6 +85,9 @@ CREATE TABLE Operaciones (
         FOREIGN KEY (ActivoId) REFERENCES Activos(Id)
 );
 
+CREATE INDEX IX_Operaciones_PersonaId ON Operaciones(PersonaId);
+CREATE INDEX IX_Operaciones_ActivoId   ON Operaciones(ActivoId);
+
 CREATE TABLE Cotizaciones (
     Id              INT IDENTITY(1,1) PRIMARY KEY,
     ActivoId        INT NOT NULL,
@@ -47,6 +99,8 @@ CREATE TABLE Cotizaciones (
     CONSTRAINT FK_Cotizaciones_Activo
         FOREIGN KEY (ActivoId) REFERENCES Activos(Id)
 );
+
+CREATE INDEX IX_Cotizaciones_ActivoId ON Cotizaciones(ActivoId);
 
 CREATE TABLE CedearRatios (
     Id              INT IDENTITY(1,1) PRIMARY KEY,
@@ -62,3 +116,6 @@ CREATE TABLE CedearRatios (
     
     CONSTRAINT UX_CedearRatios UNIQUE (CedearId, UsAssetId)
 );
+
+CREATE UNIQUE INDEX IX_CedearRatios_CedearId ON CedearRatios(CedearId);
+CREATE UNIQUE INDEX IX_CedearRatios_UsAssetId ON CedearRatios(UsAssetId);
