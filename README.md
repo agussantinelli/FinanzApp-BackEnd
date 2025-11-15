@@ -146,6 +146,9 @@ Update-Database
     <li><code>Operaciones</code></li>
     <li><code>Cotizaciones</code></li>
     <li><code>CedearRatios</code></li>
+    <li><code>Paises</code></li>
+    <li><code>Provincias</code></li>
+    <li><code>Localidades</code></li>
     <li><code>__EFMigrationsHistory</code> (tabla interna de EF Core)</li>
 </ul>
 
