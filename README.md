@@ -224,6 +224,37 @@ dotnet run
  </tbody>
 </table>
 
+<h3>🌎 Datos geográficos (seed inicial)</h3>
+
+<p>Para poblar automáticamente las tablas de países, provincias y localidades (usadas en el perfil de las personas y su residencia) el backend consume las siguientes APIs públicas durante el proceso de seed:</p>
+
+<ul>
+    <li>
+        <strong>Países (en español):</strong>  
+        <a href="https://restcountries.com" target="_blank">RestCountries v3.1</a>  
+        Endpoint: <code>https://restcountries.com/v3.1/all?fields=name,cca2,cca3</code>  
+        Se utilizan:
+        <ul>
+            <li><code>cca2</code> y <code>cca3</code> para los códigos ISO 2/3.</li>
+            <li><code>name.common</code> para el nombre del país, en español cuando está disponible.</li>
+        </ul>
+        Estos datos alimentan la entidad <code>Pais</code> y marcan específicamente a <code>AR</code> como <code>EsArgentina = true</code>.
+    </li>
+    <li>
+        <strong>Provincias argentinas:</strong>  
+        <a href="https://datosgobar.github.io/georef-ar-api/" target="_blank">API Georef Argentina</a>  
+        Endpoint: <code>https://apis.datos.gob.ar/georef/api/provincias?max=24&amp;campos=id,nombre</code>  
+        Las provincias se asocian al país Argentina (<code>Pais</code> con <code>CodigoIso2 = "AR"</code>) y llenan la tabla <code>Provincias</code>.
+    </li>
+    <li>
+        <strong>Localidades argentinas:</strong>  
+        <a href="https://datosgobar.github.io/georef-ar-api/" target="_blank">API Georef Argentina</a>  
+        Endpoint (aplanado):  
+        <code>https://apis.datos.gob.ar/georef/api/localidades?max=5000&amp;aplanar=true&amp;campos=id,nombre,provincia.id,provincia.nombre</code>  
+        Cada localidad se vincula a su provincia correspondiente y completa la tabla <code>Localidades</code>, que luego se referencia desde <code>Persona</code> como <code>LocalidadResidenciaId</code>.
+    </li>
+</ul>
+
 <hr/>
 
 <h2>🗺️ Roadmap (Backend Focus)</h2>
