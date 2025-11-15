@@ -1,5 +1,4 @@
-﻿// Services/StocksService.cs
-using ApiClient;
+﻿using ApiClient;
 using DTOs;
 
 namespace Services;
