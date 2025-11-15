@@ -115,6 +115,12 @@ public class DBFinanzasContext : DbContext
                   .HasColumnType("bit")
                   .IsRequired();
 
+            entity.Property(p => p.Rol)
+                  .HasConversion<byte>()
+                  .HasColumnType("tinyint")
+                  .HasDefaultValue((byte)RolPersona.Inversor)
+                  .IsRequired();
+
             entity.HasOne(p => p.Nacionalidad)
                   .WithMany(pais => pais.PersonasNacionalidad)
                   .HasForeignKey(p => p.NacionalidadId)
