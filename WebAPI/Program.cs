@@ -1,30 +1,36 @@
 ﻿using System.Net;
+using System.Text;
 using ApiClient;
 using Data;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Services;
 using WebAPI.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Cache
-builder.Services.AddMemoryCache();
 
-builder.Services.AddHttpClient<DolarService>(c =>
-{
-    c.BaseAddress = new Uri("https://dolarapi.com/v1/");
-});
+builder.Services.AddMemoryCache();
 
 
 builder.Services.AddDbContext<DBFinanzasContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("FinanzAppDb")));
 
-builder.Services.AddHttpClient<DolarApiClient>();
 
+// DólarAPI (para DolarApiClient)
+builder.Services.AddHttpClient<DolarApiClient>(c =>
+{
+    c.BaseAddress = new Uri("https://dolarapi.com/v1/");
+    c.Timeout = TimeSpan.FromSeconds(6);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("FinanzApp/1.0");
+    c.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+});
+
+// Servicio de Dólar (agregador)
 builder.Services.AddHttpClient<DolarService>(c =>
 {
     c.Timeout = TimeSpan.FromSeconds(6);
@@ -61,20 +67,52 @@ builder.Services.AddHttpClient<YahooFinanceClient>(c =>
 {
     return new HttpClientHandler
     {
-        AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
+        AutomaticDecompression = DecompressionMethods.GZip |
+                                 DecompressionMethods.Deflate |
+                                 DecompressionMethods.Brotli,
         AllowAutoRedirect = true,
         UseCookies = true,
         CookieContainer = new CookieContainer()
     };
 });
 
-builder.Services.AddHttpClient<DolarService>();
+// Services de dominio
 
 builder.Services.AddScoped<CryptoService>();
 builder.Services.AddScoped<StocksService>();
 builder.Services.AddScoped<CedearsService>();
 
-// CORS
+// Auth JWT
+
+var jwtSection = builder.Configuration.GetSection("Jwt");
+var jwtKey = jwtSection["Key"];
+
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    throw new InvalidOperationException("Jwt:Key no está configurado en appsettings.json.");
+}
+
+var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSection["Issuer"],
+            ValidAudience = jwtSection["Audience"],
+            IssuerSigningKey = signingKey,
+            ClockSkew = TimeSpan.FromMinutes(2)
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 var corsPolicy = "_finanzappCors";
 builder.Services.AddCors(options =>
 {
@@ -86,6 +124,18 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<DBFinanzasContext>();
+
+    // Aplica migraciones pendientes
+    db.Database.Migrate();
+
+    // Seed de países / provincias / localidades (RESTCountries + Georef)
+    DbSeeder.SeedAsync(db).GetAwaiter().GetResult();
+}
+
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -93,9 +143,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
 app.UseCors(corsPolicy);
 
-// Endpoints
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapDolarEndpoints();
 app.MapCedearsEndpoints();
 app.MapCryptoEndpoints();
