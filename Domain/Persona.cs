@@ -13,6 +13,8 @@ public class Persona
 
     public bool EsResidenteArgentina { get; set; }
 
+    public RolPersona Rol { get; set; } = RolPersona.Inversor;
+
     public int NacionalidadId { get; set; }
     public Pais Nacionalidad { get; set; } = null!;
 
