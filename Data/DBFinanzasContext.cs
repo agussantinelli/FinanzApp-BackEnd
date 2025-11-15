@@ -116,9 +116,9 @@ public class DBFinanzasContext : DbContext
                   .IsRequired();
 
             entity.Property(p => p.Rol)
-                  .HasConversion<byte>()
+                  .HasConversion<byte>()                 
                   .HasColumnType("tinyint")
-                  .HasDefaultValue((byte)RolPersona.Inversor)
+                  .HasDefaultValue(RolPersona.Inversor) 
                   .IsRequired();
 
             entity.HasOne(p => p.Nacionalidad)
@@ -139,6 +139,7 @@ public class DBFinanzasContext : DbContext
                   .OnDelete(DeleteBehavior.Restrict)
                   .HasConstraintName("FK_Personas_LocalidadResidencia");
         });
+
 
         modelBuilder.Entity<Activo>(entity =>
         {
