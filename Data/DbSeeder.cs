@@ -15,7 +15,6 @@ public static class DbSeeder
 
     public static async Task SeedAsync(DBFinanzasContext context, CancellationToken ct = default)
     {
-        // HttpClient local para las llamadas de seed
         using var http = new HttpClient();
         http.DefaultRequestHeaders.UserAgent.ParseAdd("FinanzAppSeeder/1.0 (+https://github.com/agussantinelli)");
         http.DefaultRequestHeaders.Accept.ParseAdd("application/json");
@@ -25,13 +24,12 @@ public static class DbSeeder
         await SeedLocalidadesAsync(context, http, ct);
     }
 
-    //  PAISES (RESTCOUNTRIES)
     private static async Task SeedPaisesAsync(DBFinanzasContext context, HttpClient http, CancellationToken ct)
     {
         if (await context.Paises.AnyAsync(ct))
-            return; // ya hay datos, no hacemos nada
+            return;
 
-        const string url = "https://restcountries.com/v3.1/all";
+        const string url = "https://restcountries.com/v3.1/all?fields=name,cca2,cca3";
 
         HttpResponseMessage resp;
         try
@@ -67,7 +65,6 @@ public static class DbSeeder
             if (string.IsNullOrWhiteSpace(name))
                 name = iso3;
 
-            // evitamos duplicados por ISO2
             if (list.Any(p => p.CodigoIso2 == iso2))
                 continue;
 
@@ -91,11 +88,10 @@ public static class DbSeeder
         Console.WriteLine($"[Seeder] Seed de Paises completado. Total: {list.Count}");
     }
 
-    //  PROVINCIAS ARGENTINAS (GEOREF)
     private static async Task SeedProvinciasAsync(DBFinanzasContext context, HttpClient http, CancellationToken ct)
     {
         if (await context.Provincias.AnyAsync(ct))
-            return; // ya están cargadas
+            return;
 
         var argentina = await context.Paises
             .FirstOrDefaultAsync(p => p.CodigoIso2 == "AR", ct);
@@ -150,11 +146,10 @@ public static class DbSeeder
         Console.WriteLine($"[Seeder] Seed de Provincias completado. Total: {provincias.Count}");
     }
 
-    //  LOCALIDADES ARGENTINAS (GEOREF)
     private static async Task SeedLocalidadesAsync(DBFinanzasContext context, HttpClient http, CancellationToken ct)
     {
         if (await context.Localidades.AnyAsync(ct))
-            return; // ya hay localidades
+            return;
 
         var provincias = await context.Provincias.ToListAsync(ct);
         if (provincias.Count == 0)
@@ -208,7 +203,7 @@ public static class DbSeeder
             var provKey = loc.ProvinciaNombre.ToUpperInvariant();
 
             if (!provinciasByNombre.TryGetValue(provKey, out var provincia))
-                continue; // por si algún nombre no matchea
+                continue;
 
             localidades.Add(new Localidad
             {
@@ -226,8 +221,6 @@ public static class DbSeeder
         await context.SaveChangesAsync(ct);
         Console.WriteLine($"[Seeder] Seed de Localidades completado. Total: {agrupadas.Count}");
     }
-
-    //  DTOs internos para deserializar APIs
 
     private sealed class RestCountryDto
     {
