@@ -27,7 +27,7 @@
 
 <p>Su rol principal es:</p>
 <ul>
-    <li><strong>Agregación de Datos:</strong> Consumir, normalizar y cachear datos de múltiples APIs financieras externas.</li>
+    <li><strong>Agregación de Datos:</strong> Consumir, normalizar y cachear datos de múltiples APIs financieras externas (Binance, CoinGecko, CoinCap, DolarAPI, Yahoo Finance).</li>
     <li><strong>Lógica de Conversión:</strong> Aplicar la lógica compleja para la valuación y conversión de activos usando los tipos de cambio argentinos (MEP, CCL, Oficial, Blue).</li>
     <li><strong>Persistencia:</strong> Gestionar los portafolios de usuarios, históricos y cotizaciones en una base de datos relacional. Actualmente se utiliza <strong>SQL Server</strong>.</li>
     <li><strong>Seguridad:</strong> Implementar la autenticación y autorización (JWT, espacios personales).</li>
@@ -161,36 +161,70 @@ dotnet run
 
 <hr/>
 
-<h2>🔌 Integraciones Clave (Estrategia de Adaptadores)</h2>
+<h2>🔌 Integraciones Clave (APIs Externas y Adaptadores)</h2>
 
-<p>El diseño del Backend utiliza el Patrón Adapter para la abstracción de fuentes de datos:</p>
+<p>El diseño del Backend utiliza el Patrón Adapter para la abstracción de fuentes de datos. Actualmente se usan las siguientes APIs externas:</p>
 
 <table>
  <thead>
   <tr>
-   <th>Módulo de Datos</th>
-   <th>Proveedor (Ejemplo)</th>
+   <th>Módulo / Cliente</th>
+   <th>API / Proveedor</th>
    <th>Uso Principal</th>
   </tr>
  </thead>
  <tbody>
   <tr>
-   <td><strong>CriptoAdapter</strong></td>
-   <td>Binance API / CoinGecko</td>
-   <td>Cotizaciones en USD.</td>
+   <td><code>BinanceClient</code></td>
+   <td><a href="https://api.binance.com" target="_blank">Binance Spot API</a><br/><code>/api/v3/ticker/price</code> (batch por <code>symbols</code>)</td>
+   <td>
+     Obtención de precios spot de pares cripto en USD.  
+     Devuelve una lista de <code>QuoteDTO</code> con símbolo, precio, moneda <code>USD</code>, origen <code>Binance</code> y <code>TimestampUtc</code>.
+   </td>
   </tr>
   <tr>
-   <td><strong>AccionesAdapter</strong></td>
-   <td>Yahoo Finance / BYMA / Rava / MAV</td>
-   <td>Cotizaciones en ARS y activos listados (acciones/CEDEARs).</td>
+   <td><code>CoinCapClient</code></td>
+   <td><a href="https://api.coincap.io" target="_blank">CoinCap API</a><br/><code>/v2/assets?limit=N</code></td>
+   <td>
+     Ranking de criptomonedas y precios en USD.  
+     Devuelve una lista de <code>CryptoTopDTO</code> con <code>Rank</code>, <code>Name</code>, <code>Symbol</code>, <code>PriceUsd</code>, <code>Source = "CoinCap"</code> y <code>TimestampUtc</code>.
+   </td>
   </tr>
   <tr>
-   <td><strong>ExchangeRateAdapter</strong></td>
-   <td>DolarAPI / DólarHoy / Ámbito / BCRA</td>
-   <td>Tipos de cambio (MEP, CCL, Blue, Oficial).</td>
+   <td><code>CoinGeckoClient</code></td>
+   <td><a href="https://api.coingecko.com" target="_blank">CoinGecko API</a><br/><code>/api/v3/coins/markets</code></td>
+   <td>
+     Ranking de criptomonedas por market cap y precio en USD.  
+     Devuelve una lista de <code>CryptoTopDTO</code> con <code>Rank</code> (market_cap_rank), <code>Name</code>, <code>Symbol</code>, <code>PriceUsd</code>, <code>Source = "CoinGecko"</code> y <code>TimestampUtc</code>.
+   </td>
+  </tr>
+  <tr>
+   <td><code>DolarApiClient</code></td>
+   <td><a href="https://dolarapi.com" target="_blank">DolarAPI</a><br/><code>/v1/dolares</code></td>
+   <td>
+     Obtención de cotizaciones de distintos tipos de dólar (Oficial, MEP, CCL, Blue, etc.) en ARS.  
+     Devuelve una lista de <code>DolarDTO</code> usada para seleccionar el tipo de cambio que alimenta la lógica de conversión de activos.
+   </td>
+  </tr>
+  <tr>
+   <td><code>YahooFinanceClient</code></td>
+   <td><a href="https://finance.yahoo.com" target="_blank">Yahoo Finance</a><br/>
+       <code>/v7/finance/quote</code>, <code>/v8/finance/chart</code> y parsing de HTML quote.</td>
+   <td>
+     Obtención de precios de acciones/CEDEARs (símbolos locales <code>.BA</code> y USA).  
+     Implementa estrategia de fallbacks:
+     <ul>
+       <li>Batch <code>v7/finance/quote</code> por múltiples símbolos.</li>
+       <li>Fallback a <code>v8/finance/chart</code> por símbolo.</li>
+       <li>Fallback final: scraping del HTML de la página de la cotización.</li>
+     </ul>
+     Devuelve un <code>Dictionary&lt;string, decimal&gt;</code> con precios por símbolo.
+   </td>
   </tr>
  </tbody>
 </table>
+
+<hr/>
 
 <h2>🗺️ Roadmap (Backend Focus)</h2>
 
