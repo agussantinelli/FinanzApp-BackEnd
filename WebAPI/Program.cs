@@ -128,12 +128,18 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<DBFinanzasContext>();
 
-    // Aplica migraciones pendientes
     db.Database.Migrate();
 
-    // Seed de países / provincias / localidades (RESTCountries + Georef)
-    DbSeeder.SeedAsync(db).GetAwaiter().GetResult();
+    try
+    {
+        DbSeeder.SeedAsync(db).GetAwaiter().GetResult();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Seeder] Error general en seeding: {ex.Message}");
+    }
 }
+
 
 
 if (app.Environment.IsDevelopment())

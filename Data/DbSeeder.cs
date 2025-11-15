@@ -17,6 +17,8 @@ public static class DbSeeder
     {
         // HttpClient local para las llamadas de seed
         using var http = new HttpClient();
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("FinanzAppSeeder/1.0 (+https://github.com/agussantinelli)");
+        http.DefaultRequestHeaders.Accept.ParseAdd("application/json");
 
         await SeedPaisesAsync(context, http, ct);
         await SeedProvinciasAsync(context, http, ct);
@@ -31,8 +33,23 @@ public static class DbSeeder
 
         const string url = "https://restcountries.com/v3.1/all";
 
-        var resp = await http.GetAsync(url, ct);
-        resp.EnsureSuccessStatusCode();
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.GetAsync(url, ct);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Seeder] Error llamando a RestCountries: {ex.Message}");
+            return;
+        }
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            Console.WriteLine($"[Seeder] RestCountries devolvió {(int)resp.StatusCode} ({resp.StatusCode}). Cuerpo: {body}");
+            return;
+        }
 
         var json = await resp.Content.ReadAsStringAsync(ct);
         var countries = JsonSerializer.Deserialize<List<RestCountryDto>>(json, JsonOptions) ?? new();
@@ -64,10 +81,14 @@ public static class DbSeeder
         }
 
         if (list.Count == 0)
+        {
+            Console.WriteLine("[Seeder] No se pudo construir la lista de países a partir de RestCountries.");
             return;
+        }
 
         await context.Paises.AddRangeAsync(list, ct);
         await context.SaveChangesAsync(ct);
+        Console.WriteLine($"[Seeder] Seed de Paises completado. Total: {list.Count}");
     }
 
     //  PROVINCIAS ARGENTINAS (GEOREF)
@@ -80,19 +101,40 @@ public static class DbSeeder
             .FirstOrDefaultAsync(p => p.CodigoIso2 == "AR", ct);
 
         if (argentina is null)
-            return; // por las dudas, si falló el seeding de países
+        {
+            Console.WriteLine("[Seeder] No se encontró país 'AR' para seedear provincias.");
+            return;
+        }
 
         const string url =
             "https://apis.datos.gob.ar/georef/api/provincias?max=24&campos=id,nombre";
 
-        var resp = await http.GetAsync(url, ct);
-        resp.EnsureSuccessStatusCode();
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.GetAsync(url, ct);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Seeder] Error llamando a Georef provincias: {ex.Message}");
+            return;
+        }
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            Console.WriteLine($"[Seeder] Georef provincias devolvió {(int)resp.StatusCode} ({resp.StatusCode}). Cuerpo: {body}");
+            return;
+        }
 
         var json = await resp.Content.ReadAsStringAsync(ct);
         var data = JsonSerializer.Deserialize<GeorefProvinciaResponse>(json, JsonOptions);
 
         if (data?.Provincias is null || data.Provincias.Count == 0)
+        {
+            Console.WriteLine("[Seeder] Georef provincias no devolvió datos.");
             return;
+        }
 
         var provincias = data.Provincias
             .Where(p => !string.IsNullOrWhiteSpace(p.Nombre))
@@ -105,6 +147,7 @@ public static class DbSeeder
 
         await context.Provincias.AddRangeAsync(provincias, ct);
         await context.SaveChangesAsync(ct);
+        Console.WriteLine($"[Seeder] Seed de Provincias completado. Total: {provincias.Count}");
     }
 
     //  LOCALIDADES ARGENTINAS (GEOREF)
@@ -113,10 +156,12 @@ public static class DbSeeder
         if (await context.Localidades.AnyAsync(ct))
             return; // ya hay localidades
 
-        // necesitamos las provincias que ya se seedearon
         var provincias = await context.Provincias.ToListAsync(ct);
         if (provincias.Count == 0)
+        {
+            Console.WriteLine("[Seeder] No hay provincias en la BD; no se pueden seedear localidades.");
             return;
+        }
 
         var provinciasByNombre = provincias
             .GroupBy(p => p.Nombre.ToUpperInvariant())
@@ -125,14 +170,32 @@ public static class DbSeeder
         const string url =
             "https://apis.datos.gob.ar/georef/api/localidades?max=5000&aplanar=true&campos=id,nombre,provincia.id,provincia.nombre";
 
-        var resp = await http.GetAsync(url, ct);
-        resp.EnsureSuccessStatusCode();
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.GetAsync(url, ct);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Seeder] Error llamando a Georef localidades: {ex.Message}");
+            return;
+        }
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            Console.WriteLine($"[Seeder] Georef localidades devolvió {(int)resp.StatusCode} ({resp.StatusCode}). Cuerpo: {body}");
+            return;
+        }
 
         var json = await resp.Content.ReadAsStringAsync(ct);
         var data = JsonSerializer.Deserialize<GeorefLocalidadResponse>(json, JsonOptions);
 
         if (data?.Localidades is null || data.Localidades.Count == 0)
+        {
+            Console.WriteLine("[Seeder] Georef localidades no devolvió datos.");
             return;
+        }
 
         var localidades = new List<Localidad>();
 
@@ -154,7 +217,6 @@ public static class DbSeeder
             });
         }
 
-        // Evitar duplicados por (Nombre, ProvinciaId)
         var agrupadas = localidades
             .GroupBy(l => new { l.Nombre, l.ProvinciaId })
             .Select(g => g.First())
@@ -162,6 +224,7 @@ public static class DbSeeder
 
         await context.Localidades.AddRangeAsync(agrupadas, ct);
         await context.SaveChangesAsync(ct);
+        Console.WriteLine($"[Seeder] Seed de Localidades completado. Total: {agrupadas.Count}");
     }
 
     //  DTOs internos para deserializar APIs
