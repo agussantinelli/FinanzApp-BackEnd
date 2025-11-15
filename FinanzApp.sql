@@ -1,18 +1,18 @@
 CREATE TABLE Paises (
-    Id           INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre       NVARCHAR(150) NOT NULL,
-    CodigoIso2   NVARCHAR(2)   NOT NULL,   -- AR, US, BR...
-    CodigoIso3   NVARCHAR(3)   NOT NULL,   -- ARG, USA, BRA...
-    EsArgentina  BIT NOT NULL DEFAULT 0
+    Id              INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre          NVARCHAR(200) NOT NULL,
+    CodigoIso2      CHAR(2) NOT NULL,
+    CodigoIso3      CHAR(3) NOT NULL,
+    EsArgentina     BIT NOT NULL DEFAULT 0,
+
+    CONSTRAINT UX_Paises_Iso2 UNIQUE (CodigoIso2),
+    CONSTRAINT UX_Paises_Iso3 UNIQUE (CodigoIso3)
 );
 
-CREATE UNIQUE INDEX UX_Paises_Iso2 ON Paises(CodigoIso2);
-CREATE UNIQUE INDEX UX_Paises_Iso3 ON Paises(CodigoIso3);
-
 CREATE TABLE Provincias (
-    Id      INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre  NVARCHAR(150) NOT NULL,
-    PaisId  INT NOT NULL,
+    Id          INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre      NVARCHAR(200) NOT NULL,
+    PaisId      INT NOT NULL,
 
     CONSTRAINT FK_Provincias_Pais
         FOREIGN KEY (PaisId) REFERENCES Paises(Id)
@@ -20,38 +20,37 @@ CREATE TABLE Provincias (
 
 CREATE TABLE Localidades (
     Id          INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre      NVARCHAR(150) NOT NULL,
+    Nombre      NVARCHAR(200) NOT NULL,
     ProvinciaId INT NOT NULL,
 
     CONSTRAINT FK_Localidades_Provincia
         FOREIGN KEY (ProvinciaId) REFERENCES Provincias(Id)
 );
 
-CREATE TABLE Personas (
-    Id                  INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre              NVARCHAR(100) NOT NULL,
-    Apellido            NVARCHAR(100) NOT NULL,
-    Email               NVARCHAR(200) NOT NULL UNIQUE,
-    FechaAlta           DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    FechaNac            DATETIME2 NOT NULL,
 
-    PaisResidenciaId    INT NOT NULL,
-    PaisNacionalidadId  INT NOT NULL,
-    ProvinciaId         INT NULL,
-    LocalidadId         INT NULL,
+CREATE TABLE Personas (
+    Id                      INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre                  NVARCHAR(100) NOT NULL,
+    Apellido                NVARCHAR(100) NOT NULL,
+    Email                   NVARCHAR(200) NOT NULL UNIQUE,
+    FechaAlta               DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FechaNacimiento         DATETIME2 NOT NULL,
+    EsResidenteArgentina    BIT NOT NULL,
+
+    NacionalidadId          INT NOT NULL,
+    PaisResidenciaId        INT NULL,
+    LocalidadResidenciaId   INT NULL,
+
+    CONSTRAINT FK_Personas_PaisNacionalidad
+        FOREIGN KEY (NacionalidadId) REFERENCES Paises(Id),
 
     CONSTRAINT FK_Personas_PaisResidencia
         FOREIGN KEY (PaisResidenciaId) REFERENCES Paises(Id),
 
-    CONSTRAINT FK_Personas_PaisNacionalidad
-        FOREIGN KEY (PaisNacionalidadId) REFERENCES Paises(Id),
-
-    CONSTRAINT FK_Personas_Provincia
-        FOREIGN KEY (ProvinciaId) REFERENCES Provincias(Id),
-
-    CONSTRAINT FK_Personas_Localidad
-        FOREIGN KEY (LocalidadId) REFERENCES Localidades(Id)
+    CONSTRAINT FK_Personas_LocalidadResidencia
+        FOREIGN KEY (LocalidadResidenciaId) REFERENCES Localidades(Id)
 );
+
 
 CREATE UNIQUE INDEX IX_Personas_Email ON Personas(Email);
 
