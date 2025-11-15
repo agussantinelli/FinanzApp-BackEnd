@@ -37,6 +37,8 @@ CREATE TABLE Personas (
     FechaNacimiento         DATETIME2 NOT NULL,
     EsResidenteArgentina    BIT NOT NULL,
 
+    Rol                     TINYINT NOT NULL DEFAULT 0,
+
     NacionalidadId          INT NOT NULL,
     PaisResidenciaId        INT NULL,
     LocalidadResidenciaId   INT NULL,
@@ -50,6 +52,7 @@ CREATE TABLE Personas (
     CONSTRAINT FK_Personas_LocalidadResidencia
         FOREIGN KEY (LocalidadResidenciaId) REFERENCES Localidades(Id)
 );
+
 
 
 CREATE UNIQUE INDEX IX_Personas_Email ON Personas(Email);
